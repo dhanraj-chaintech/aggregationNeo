@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Network Graph</title>
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <style type="text/css">
+    #mynetwork {
+      width: 1600px;
+      height: 700px;
+      border: 1px solid rgb(3, 14, 0);
+    }
+   code {
+      width: 600px !important;
+      overflow-y: scroll;
+      overflow-x: hidden;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="mynetwork"></div>
+  <div id="details" style="
+        margin-top: 20px;
+        font-family: Tahoma, sans-serif;
+        border: 1px solid #ccc;
+        padding: 10px;
+        display: none;
+      ">
+    <h3>Details</h3>
+    <pre id="detailsContent" style="white-space: pre-wrap"></pre>
+  </div>
+
+  <script type="text/javascript">
+    async function fetchGraphData() {
+      let cypherString = `
+MATCH (n:Person)
+WITH n LIMIT 10 
+WITH collect(n) AS nodes  
+UNWIND nodes AS n
+OPTIONAL MATCH (n)-[r]-(m)
+WHERE m IN nodes  
+RETURN n, r, m;
+
+
+      `;
+
+      try {
+        let response = await fetch("http://localhost:7474/db/neo4j/tx", {
+          method: "POST",
+          headers: {
+            Authorization: "Basic " + btoa("neo4j:root@123"),
+            "Content-Type": "application/json",
+            Accept: "application/json;charset=UTF-8",
+          },
+          body:
+            '{"statements":[{"statement":"' +
+            cypherString
+              .replace(/(\r\n|\n|\r)/gm, "\\n")
+              .replace(/"/g, '\\"') +
+            '", "resultDataContents":["graph", "row"]}]}',
+        });
+
+        if (!response.ok) {
+          console.error("HTTP Error: ", response.statusText);
+          return;
+        }
+
+        let jsonResponse = await response.json();
+        if (
+          !jsonResponse.results ||
+          !jsonResponse.results[0] ||
+          !jsonResponse.results[0].data
+        ) {
+          console.error("Unexpected response format:", jsonResponse);
+          return;
+        }
+
+        let graphData = jsonResponse.results[0].data;
+
+        // Prepare nodes and edges for vis-network
+        let nodes = new vis.DataSet();
+        let edges = new vis.DataSet();
+
+        graphData.forEach((data) => {
+          let graph = data.graph;
+
+          // Add nodes
+          graph.nodes.forEach((node) => {
+            if (!nodes.get(node.id)) {
+              nodes.add({
+                id: node.id,
+                label: node.properties.userId || node.labels[0],
+                email: node.properties.email,
+                username: node.properties.username,
+                color: node.properties.userId
+                  ? "rgb(85, 180, 232)"
+                  : "rgb(31, 99, 14)",
+              });
+            }
+          });
+
+          // Add edges (relationships)
+          graph.relationships.forEach((relationship) => {
+            edges.add({
+              from: relationship.startNode,
+              to: relationship.endNode,
+              label: relationship.type,
+              arrows: { to: { enabled: true, scaleFactor: 1 } },
+              color: {
+                color: "black",
+                highlight: "blue",
+                hover: "blue",
+              },
+              Transaction_type: relationship.properties.transaction_type,
+              total_amount: relationship.properties.total_amount,
+              coin_code: relationship.properties.coin_code,
+              transaction: relationship.properties.transaction,
+              transaction_status: relationship.properties.transaction_status,
+              senderName: relationship.properties.senderName,
+              senderEmail: relationship.properties.senderEmail,
+              receiverName: relationship.properties.receiverName,
+              receiverEmail: relationship.properties.receiverEmail,
+              transaction_count: relationship.properties.transaction_count,
+              transactions: relationship.properties.transactions,
+              dashes: true,
+              // Add properties to edges
+              title: `Transaction Type: ${relationship.properties.transaction_type || "Not Available"
+                } Amount: ${relationship.properties.total_amount || "Not Available"
+                }Coin: ${relationship.properties.coin_code || "Not Available"
+                } MM-YY:${relationship.properties.month || "Not Available"} ${relationship.properties.year || "Not Available"
+                } Sender: ${relationship.properties.senderName || "Not Available"
+                } (${relationship.properties.senderEmail || "Not Available"
+                }) Receiver: ${relationship.properties.receiverName || "Not Available"
+                } (${relationship.properties.receiverEmail || "Not Available"
+                }) Transaction Count: ${relationship.properties.transaction_count || "Not Available"
+                }`,
+            });
+          });
+        });
+
+        // Create the network visualization
+        var container = document.getElementById("mynetwork");
+        var data = {
+          nodes: nodes,
+          edges: edges,
+        };
+        var options = {
+          nodes: {
+            shape: "dot",
+            size: 20,
+            font: {
+              size: 15,
+              face: "Tahoma",
+            },
+            borderWidth: 2,
+          },
+          edges: {
+            width: 2,
+            smooth: {
+              type: "continuous",
+            },
+          },
+          interaction: {
+            hover: true,
+            dragNodes: true,
+            zoomView: true,
+          },
+          physics: {
+            enabled: true,
+            forceAtlas2Based: {
+              gravitationalConstant: -26,
+              centralGravity: 0.005,
+              springLength: 230,
+              springConstant: 0.18,
+            },
+            maxVelocity: 146,
+            solver: "forceAtlas2Based",
+            timestep: 0.35,
+            stabilization: {
+              enabled: true,
+              iterations: 1000,
+              updateInterval: 25,
+            },
+          },
+          layout: {
+            improvedLayout: false,
+          },
+        };
+        var network = new vis.Network(container, data, options);
+
+        // After the network is stabilized, turn off the physics to freeze the layout
+        network.on("stabilizationIterationsDone", function () {
+          network.setOptions({ physics: false });
+        });
+
+        // Handle click on nodes and edges
+        network.on("click", function (params) {
+          let detailsDiv = document.getElementById("details");
+          let detailsContent = document.getElementById("detailsContent");
+
+          // Handle node click
+          if (params.nodes.length > 0) {
+            let nodeId = params.nodes[0];
+            let nodeData = nodes.get(nodeId);
+            detailsDiv.style.display = "block";
+            detailsContent.innerHTML = `
+              <p><strong>Node ID:</strong> ${nodeData.id}</p>
+              <p><strong>Label:</strong> ${nodeData.label}</p>
+              <p><strong>Username:</strong> ${nodeData.username || "Not Available"
+              }</p>
+              <p><strong>Email:</strong> ${nodeData.email || "Not Available"
+              }</p>
+            `;
+          }
+          // Handle edge (relationship) click
+          else if (params.edges.length > 0) {
+            let edgeId = params.edges[0];
+            let edgeData = edges.get(edgeId);
+            console.log(edgeData);
+
+            detailsDiv.style.display = "block";
+            detailsContent.innerHTML = `
+  <p><strong>Edge ID:</strong> ${edgeData.id || "Not Available"}</p>
+  <p><strong>Transaction Type:</strong> ${edgeData.transaction_type || "Not Available"
+              }</p>
+  <p><strong>Transaction Amount:</strong> ${edgeData.total_amount || "Not Available"
+              }</p>
+  <p><strong>Coin:</strong> ${edgeData.coin_code || "Not Available"}</p>
+  <p><strong>Date:</strong> ${edgeData.transaction || "Not Available"}</p>
+  <p><strong>Status:</strong> ${edgeData.transaction_status || "Not Available"
+              }</p>
+  <p><strong>Sender:</strong> ${edgeData.senderName || "Not Available"} (${edgeData.senderEmail || "Not Available"
+              })</p>
+  <p><strong>Receiver:</strong> ${edgeData.receiverName || "Not Available"} (${edgeData.receiverEmail || "Not Available"
+              })</p>
+  <p>Transaction Count:${edgeData.transaction_count || "Not Available"}</p>
+  <p><strong>Transactions:</strong></p>
+ <code><p><strong>Transactions:</strong></p>
+    <ul>
+    ${Array.isArray(edgeData.transactions) && edgeData.transactions.length > 0
+        ? edgeData.transactions.map((transaction, index) => 
+            `<li><strong>Transaction ${index + 1}:</strong>
+              <ul>
+                ${Object.entries(transaction).map(([key, value]) => 
+                  `<li><strong>${key}:</strong> ${value || "Not Available"}</li>`
+                ).join('')}
+              </ul>
+            </li>`
+          ).join('')
+        : "<li>No transactions available.</li>"
+    }
+    </ul></code>
+`; 
+          } else {
+            // If clicked outside nodes or edges, hide the details
+            detailsDiv.style.display = "none";
+          }
+        });
+      } catch (error) {
+        console.error("Error fetching data from Neo4j:", error);
+      }
+    }
+
+    // Fetch and display the data
+    fetchGraphData();
+  </script>
+</body>
+
+</html>
