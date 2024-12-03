@@ -39,8 +39,10 @@ WITH n LIMIT 10
 WITH collect(n) AS nodes  
 UNWIND nodes AS n
 OPTIONAL MATCH (n)-[r]-(m)
-WHERE m IN nodes  
-RETURN n, r, m;
+WHERE r.year > 2022 AND r.filter = "yearly" 
+AND m IN nodes  
+RETURN n, r, m
+LIMIT 1000
 
 
       `;
@@ -67,6 +69,8 @@ RETURN n, r, m;
         }
 
         let jsonResponse = await response.json();
+        console.log(jsonResponse);
+        
         if (
           !jsonResponse.results ||
           !jsonResponse.results[0] ||
@@ -112,7 +116,7 @@ RETURN n, r, m;
                 highlight: "blue",
                 hover: "blue",
               },
-              Transaction_type: relationship.properties.transaction_type,
+              transaction_type: relationship.properties.transaction_type,
               total_amount: relationship.properties.total_amount,
               coin_code: relationship.properties.coin_code,
               transaction: relationship.properties.transaction,
@@ -123,6 +127,8 @@ RETURN n, r, m;
               receiverEmail: relationship.properties.receiverEmail,
               transaction_count: relationship.properties.transaction_count,
               transactions: relationship.properties.transactions,
+              month:relationship.properties.month,
+              year:relationship.properties.year,
               dashes: true,
               // Add properties to edges
               title: `Transaction Type: ${relationship.properties.transaction_type || "Not Available"
@@ -227,19 +233,16 @@ RETURN n, r, m;
   <p><strong>Transaction Amount:</strong> ${edgeData.total_amount || "Not Available"
               }</p>
   <p><strong>Coin:</strong> ${edgeData.coin_code || "Not Available"}</p>
-  <p><strong>Date:</strong> ${edgeData.transaction || "Not Available"}</p>
-  <p><strong>Status:</strong> ${edgeData.transaction_status || "Not Available"
-              }</p>
   <p><strong>Sender:</strong> ${edgeData.senderName || "Not Available"} (${edgeData.senderEmail || "Not Available"
               })</p>
   <p><strong>Receiver:</strong> ${edgeData.receiverName || "Not Available"} (${edgeData.receiverEmail || "Not Available"
               })</p>
   <p>Transaction Count:${edgeData.transaction_count || "Not Available"}</p>
+  <p>Date MM-YY : ${edgeData.month || "Not Available"}/${edgeData.year || "Not Available"}</p>
   <p><strong>Transactions:</strong></p>
  <code><p><strong>Transactions:</strong></p>
     <ul>
-    ${Array.isArray(edgeData.transactions) && edgeData.transactions.length > 0
-        ? edgeData.transactions.map((transaction, index) => 
+    ${ JSON.parse(edgeData.transactions).map((transaction, index) => 
             `<li><strong>Transaction ${index + 1}:</strong>
               <ul>
                 ${Object.entries(transaction).map(([key, value]) => 
@@ -248,10 +251,9 @@ RETURN n, r, m;
               </ul>
             </li>`
           ).join('')
-        : "<li>No transactions available.</li>"
     }
     </ul></code>
-`; 
+`; console.log({data:edgeData.transactions})
           } else {
             // If clicked outside nodes or edges, hide the details
             detailsDiv.style.display = "none";

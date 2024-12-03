@@ -840,6 +840,75 @@ transaction_count:1,
     },
   },
 ];
+const groupTransactionFrequencyYear = [
+  {
+    $group: {
+      _id: {
+        sender: "$sender",
+        receiver: "$receiver",
+        coin_code: "$coin_code",
+        year: {
+          $year: "$created_at",
+        },
+      },
+      total_amount: {
+        $sum: "$transaction_amount",
+      },
+      transactions: {
+        $push: "$$ROOT",
+      },
+      transaction_count: {
+        $sum: 1,
+      },
+    },
+  },
+ 
+  {
+    $project: {
+      _id: 0,
+      sender: "$_id.sender",
+      filter:'year',
+      receiver: "$_id.receiver",
+      coin_code: "$_id.coin_code",
+      year: "$_id.year",
+      total_amount: 1,
+      transaction_count:1,
+      transactions: {
+        $map: {
+          input: "$transactions",
+          as: "transaction",
+          in: {
+            transaction_amount: "$$transaction.transaction_amount",
+            transaction_id: "$$transaction.transaction_id",
+            created_at: "$$transaction.created_at",
+            fundsource: "$$transaction.fundsource",
+            internal_status: "$$transaction.internal_status",
+            transaction_number: "$$transaction.transaction_number",
+            transaction_usd_value: "$$transaction.transaction_usd_value",
+            transaction_type: "$$transaction.transaction_type",
+            systemTags: "$$transaction.systemTags",
+          },
+        },
+      },
+      transaction_count: 1,
+      senderEmail: {
+        $arrayElemAt: ["$transactions.senderEmail", 0],
+      },
+      receiverEmail: {
+        $arrayElemAt: ["$transactions.receiverEmail", 0],
+      },
+      senderName: {
+        $arrayElemAt: ["$transactions.senderName", 0],
+      },
+      receiverName: {
+        $arrayElemAt: ["$transactions.receiverName", 0],
+      },
+      transaction_type: {
+        $arrayElemAt: ["$transactions.transaction_type", 0],
+      },
+    },
+  },
+];
 module.exports = {
   IXFI_NETWORK_REFUND,
   IXFIFILTER_REWARDS_AND_TYPE_INTERNAL_INTERNAL_TRANSAFRESPACE_NOTIN_WITH_TRANSACTION_NUM,
@@ -851,4 +920,5 @@ module.exports = {
   groupBasedOnRewardsRemoveDuplicate,
   groupOtherTransactionType,
   groupTransactionFrequency,
+  groupTransactionFrequencyYear 
 };

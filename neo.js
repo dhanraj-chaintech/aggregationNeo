@@ -87,3 +87,26 @@ MERGE (s)-[recRel:recM {transaction_type: 'receive', coin_code: coin}]->(n)
 SET recRel.transaction_amount = totalAmount
 
 RETURN s, n   // You can adjust this to return additional details if needed
+______________________________________________________________________________
+query = `
+                    MATCH (vStart1:${neo4jQueryConstants[searchType][0]} {${neo4jQueryConstants[searchType][1]}: '${search}'})
+                    OPTIONAL MATCH (vStart2:${neo4jQueryConstants[branchSearchType][0]} {${neo4jQueryConstants[branchSearchType][1]}: '${branchSearch}'})
+   
+                    CALL apoc.path.expandConfig(vStart1, {
+                        relationshipFilter: "visitorId|IP",
+                        uniqueness: "NODE_GLOBAL",
+                        maxLevel: -1
+                    }) YIELD path AS path1
+   
+                    WITH path1, vStart2
+                    CALL apoc.path.expandConfig(vStart2, {
+                        relationshipFilter: "visitorId|IP",
+                        uniqueness: "NODE_GLOBAL",
+                        maxLevel: -1
+                    }) YIELD path AS path2
+                    WITH path1, path2
+   
+                    WHERE last(nodes(path1)) = last(nodes(path2))
+                    RETURN path1, path2
+                    LIMIT 1
+                    `;
