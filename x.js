@@ -7,8 +7,6 @@ WITH n LIMIT 10
 WITH collect(n) AS nodes  
 UNWIND nodes AS n
 OPTIONAL MATCH (n)-[r]-(m)
-WHERE r.year > 2022 AND r.filter = "yearly" 
-AND m IN nodes  
 RETURN n, r, m
 LIMIT 1000
 
@@ -41,3 +39,5 @@ LIMIT 1000
     }
 
     fetchGraphData()
+
+

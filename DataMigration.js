@@ -558,11 +558,11 @@ const GropingTransactionBasedOnDate = async function () {
 
 // Execute migrations
 (async () => {
-  // await DataMigration_Network_refund();
-  // await DataMigration_Transaction_Id();
-  // await AddReceiverAddress();
-  // await AddSenderAddress();
-  // await AddSenderReceiverDetails();
+  await DataMigration_Network_refund();
+  await DataMigration_Transaction_Id();
+  await AddReceiverAddress();
+  await AddSenderAddress();
+  await AddSenderReceiverDetails();
   // await GropingTransaction();
-  await GropingTransactionBasedOnDate();
+  // await GropingTransactionBasedOnDate();
 })();

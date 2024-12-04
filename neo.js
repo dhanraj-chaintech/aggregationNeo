@@ -110,3 +110,20 @@ query = `
                     RETURN path1, path2
                     LIMIT 1
                     `;
+______________________________________________________________________________
+MATCH (s:Person)-[t:SEND]->(r:Person)
+WITH t, s, r, 
+     [transaction IN t.transactions | apoc.convert.fromJsonMap(transaction)] AS transactions
+UNWIND transactions AS transaction
+WITH transaction, s, r
+WHERE date(transaction.date) >= date('2024-11-01') AND date(transaction.date) <= date('2024-12-30')
+RETURN 
+    s,
+    r
+
+
+____________________________________________________________________________________________________
+MATCH (a:User {name: 'a'})-[r:SEND]->(t:Transaction)-[:SEND]->(u2:User)
+WITH a, u2, SUM(t.amount) AS totalAmount
+CALL apoc.create.vRelationship(a, 'SENT_AGGREGATED', {amount: totalAmount}, u2) YIELD rel
+RETURN a, u2, rel;
