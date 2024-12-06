@@ -189,3 +189,41 @@ CALL apoc.create.vRelationship(s, 'VIRTUAL_SEND', {
 RETURN rel, s,r LIMIT 10
 
 ```
+```javascript
+MATCH (s:Person)-[t:SEND]->(r:Person)
+where s.username="rishi0007" AND r.username="ccptest"
+WITH s, r, t, 
+     // Convert the stringified JSON array into a list of JSON objects using fromJsonMap
+     [transaction IN t.transactions 
+        | apoc.convert.fromJsonMap(transaction)
+     ] AS transactions
+WITH s, r, t, 
+     // Filter transactions by date range and coin_code
+     [txn IN transactions
+        WHERE date(txn.date) <= date('2025-08-25') 
+     ] AS filteredTransactions
+WITH s, r, t, filteredTransactions, 
+     // Collect the filtered transactions into an array as transaction history
+     COLLECT(filteredTransactions) AS transactionHistory,
+     // Calculate total USD and count of filtered transactions
+     REDUCE(totalValue = 0.0, txn IN filteredTransactions | totalValue + toFloat(txn.transaction_usd_value)) AS totalUsd,
+     SIZE(filteredTransactions) AS transactionCount
+WHERE totalUsd > 0
+// Create virtual relationship with the computed data, including platform, source_address, and destination_address
+CALL apoc.create.vRelationship(s, 'VIRTUAL_SEND', {
+    totalUsd: totalUsd,
+    transactionCount: transactionCount,
+    receiverName: r.name,
+    transactionHistory: apoc.convert.toJson(transactionHistory), 
+    senderName: s.name,
+    senderEmail: s.email,
+    receiverEmail: r.email,
+    platform: t.platform,  
+    source_address: t.source_address,  
+    destination_address: t.destination_address  
+}, r) YIELD rel
+RETURN rel, s, r
+LIMIT 10
+;
+
+```

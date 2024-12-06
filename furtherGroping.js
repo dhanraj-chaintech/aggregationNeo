@@ -23,6 +23,9 @@ async function bulkInsertData() {
         receiverName: row.receiverName,
         receiverEmail: row.receiverEmail,
         transactionType: row.transaction_type,
+        platform: row.platform,
+        source_address: row.source_address,
+        destination_address: row.destination_address,
         coinCode: row.coin_code,
         date:row.created_at.toISOString().split('T')[0],
         time:row.created_at.toISOString().split('T')[1].split('.')[0],
@@ -45,7 +48,10 @@ SET t.transaction_type = row.transactionType,
     t.senderEmail = row.senderEmail,
     t.receiver = row.receiver,
     t.receiverName = row.receiverName,
-    t.receiverEmail = row.receiverEmail
+    t.receiverEmail = row.receiverEmail,
+    t.platform = row.platform,
+    t.source_address = row.source_address,
+    t.destination_address = row.destination_address
 
 // Use APOC to store the JSON data (with details for each transaction)
 WITH s, r, t, row
