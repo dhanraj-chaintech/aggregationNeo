@@ -18,6 +18,7 @@ async function bulkInsertData() {
         senderEmail: row.senderEmail,
         transaction_amount: row.transaction_amount,
         receiver: row.receiver.toString(),
+        transaction_usd_value: row.transaction_usd_value,
         receiverName: row.receiverName,
         receiverEmail: row.receiverEmail,
         transactionType: row.transaction_type,
@@ -37,12 +38,13 @@ async function bulkInsertData() {
     FOREACH (_ IN CASE WHEN row.transactionType = 'send' THEN [1] ELSE [] END |
         MERGE (s)-[t:SEND {coin_code: row.coinCode}]->(r)
         SET t.transaction_type = row.transactionType,
-            t.total_amount = COALESCE(t.total_amount, 0) + toFloat(row.transaction_amount),
+            t.total_amount = COALESCE(t.total_amount, 0) + toFloat(row.transaction_usd_value),
             t.transactions = COALESCE(t.transactions, []) + [
                 apoc.convert.toJson({
                     date: date(row.date),  // Use the formatted date here  
                      time: row.time,          
-                    amount: toFloat(row.transaction_amount)
+                     amount: toFloat(row.transaction_amount),
+                    transaction_usd_value:toFloat(row.transaction_usd_value)
                 })
             ],
             t.transaction_count = COALESCE(t.transaction_count, 0) + 1,
@@ -58,12 +60,13 @@ async function bulkInsertData() {
     FOREACH (_ IN CASE WHEN row.transactionType = 'receive' THEN [1] ELSE [] END |
         MERGE (s)-[t:SEND {coin_code: row.coinCode}]->(r)
         SET t.transaction_type = row.transactionType,
-            t.total_amount = COALESCE(t.total_amount, 0) + toFloat(row.transaction_amount),
+            t.total_amount = COALESCE(t.total_amount, 0) + toFloat(row.transaction_usd_value),
             t.transactions = COALESCE(t.transactions, []) + [
                 apoc.convert.toJson({
                     date: date(row.date),  
                      time: row.time,                  
-                    amount: toFloat(row.transaction_amount)
+                   amount: toFloat(row.transaction_amount),
+                    transaction_usd_value:toFloat(row.transaction_usd_value)
                 })
             ],
             t.transaction_count = COALESCE(t.transaction_count, 0) + 1,
@@ -79,12 +82,13 @@ async function bulkInsertData() {
     FOREACH (_ IN CASE WHEN row.transactionType IS NULL OR NOT row.transactionType IN ['send', 'receive'] THEN [1] ELSE [] END |
         MERGE (s)-[t:SEND {coin_code: row.coinCode}]->(r)
         SET t.transaction_type = row.transactionType,
-            t.total_amount = COALESCE(t.total_amount, 0) + toFloat(row.transaction_amount),
+            t.total_amount = COALESCE(t.total_amount, 0) + toFloat(row.transaction_usd_value),
             t.transactions = COALESCE(t.transactions, []) + [
                 apoc.convert.toJson({
                     date: date(row.date),
-                     time: row.time,
-                    amount: toFloat(row.transaction_amount)
+                    time: row.time,
+                    amount: toFloat(row.transaction_amount),
+                    transaction_usd_value:toFloat(row.transaction_usd_value)
                 })
             ],
             t.transaction_count = COALESCE(t.transaction_count, 0) + 1,

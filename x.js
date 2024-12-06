@@ -2,13 +2,7 @@ const fs = require('fs');
 const path = require('path');
 async function fetchGraphData() {
     let cypherString = `
-MATCH (n:Person)
-WITH n LIMIT 10 
-WITH collect(n) AS nodes  
-UNWIND nodes AS n
-OPTIONAL MATCH (n)-[r]-(m)
-RETURN n, r, m
-LIMIT 1000
+match (n)-[r:SEND]->(s) return n,s,r limit 500
 
 
     `;

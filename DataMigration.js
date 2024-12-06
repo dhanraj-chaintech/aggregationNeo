@@ -17,7 +17,6 @@ const collectionName = "wallet_history";
 const kytCollectionName = "wallet_history_kyt";
 const platformName = "IXFI";
 const groupingKytCOllectionName = "wallet_history_kyt_group";
-const groupingByDateCollectionName = "wallet_history_kyt_by_date";
 // Migration function for IXFI Network Refund
 const DataMigration_Network_refund = async function () {
   try {
@@ -186,6 +185,7 @@ const AddReceiverAddress = async function () {
         transaction_id,
         sender_doc = null,
         transaction_type,
+        source_address,
         ...rest
       } = item;
 
@@ -193,6 +193,7 @@ const AddReceiverAddress = async function () {
         ...rest,
         _id,
         transaction_id,
+        source_address,
         systemTags,
         transaction_type,
         user_id,
@@ -243,12 +244,15 @@ const AddReceiverAddress = async function () {
             receiver: user_id,
           };
         } else if (!sender_doc?._id) {
+          let senderExternalType = 'EXTERNAL';
+          if(!isNaN(parseInt(transaction_number, 10))) senderExternalType ='BINANCE';
+          if(transaction_number.length > 40) senderExternalType = 'SUPER_EXTERNAL';
           transformedItem = {
             _id,
             ...rest,
-            platform: platformName,
+            platform: senderExternalType,
             transaction_number,
-            sender: "EXTERNAL",
+            sender:(senderExternalType==="SUPER_EXTERNAL")?source_address: senderExternalType, 
             receiver: user_id,
           };
         } else {
@@ -286,6 +290,85 @@ const AddReceiverAddress = async function () {
     console.error(error);
   }
 };
+
+// Function to add Sender Address
+const AddSenderAddress = async function () {
+  try {
+    console.log(
+      `Starting data mapping receiver to sender for platform: ${platformName}`
+    );
+
+    const data = await db
+      .collection(kytCollectionName)
+      .aggregate(AddReceiverInSender)
+      .toArray();
+
+    if (data.length === 0) {
+      console.log("No data found for mapping.");
+      return;
+    }
+
+    const bulkOperations = data.map((item) => {
+      const {
+        _id,
+        user_id,
+        transaction_number,
+        transaction_id,
+        receiver_doc = null,
+        transaction_type,
+        destination_address=null,
+        ...rest
+      } = item;
+
+      let transformedItem = {
+        ...rest,
+        _id,
+        user_id,
+        transaction_id,
+        transaction_type,
+        transaction_number,
+        platform: platformName,
+        destination_address
+      };
+
+      if (transaction_type === "send") {
+        transformedItem.sender = user_id;
+        if (receiver_doc?._id) {
+          transformedItem.receiver = receiver_doc.user_id;
+        } else {
+          let receiverExternalType = 'EXTERNAL';
+          if(!isNaN(parseInt(transaction_number, 10))) receiverExternalType ='BINANCE';
+          if(transaction_number.length > 40) receiverExternalType = 'SUPER_EXTERNAL';
+          transformedItem.receiver = (receiverExternalType==="SUPER_EXTERNAL")?destination_address: receiverExternalType;
+          transformedItem.platform =receiverExternalType;
+        }
+      }
+
+      return {
+        updateOne: {
+          filter: { _id },
+          update: { $set: transformedItem },
+          upsert: true,
+        },
+      };
+    });
+
+    const result = await db
+      .collection(kytCollectionName)
+      .bulkWrite(bulkOperations);
+
+    console.log(
+      `Receiver to sender mapping completed for platform: ${platformName}`
+    );
+    console.log(
+      `${result.matchedCount} documents matched, ${result.modifiedCount} updated, and ${result.upsertedCount} inserted into ${kytCollectionName}.`
+    );
+  } catch (error) {
+    console.error("Error during mapping receiver to sender:", error.message);
+    console.error(error);
+  }
+};
+
 const AddSenderReceiverDetails = async function () {
   try {
     console.log(`Starting data mapping sender and receiver from users schema`);
@@ -343,77 +426,6 @@ const AddSenderReceiverDetails = async function () {
     console.error(error);
   }
 };
-// Function to add Sender Address
-const AddSenderAddress = async function () {
-  try {
-    console.log(
-      `Starting data mapping receiver to sender for platform: ${platformName}`
-    );
-
-    const data = await db
-      .collection(kytCollectionName)
-      .aggregate(AddReceiverInSender)
-      .toArray();
-
-    if (data.length === 0) {
-      console.log("No data found for mapping.");
-      return;
-    }
-
-    const bulkOperations = data.map((item) => {
-      const {
-        _id,
-        user_id,
-        transaction_number,
-        transaction_id,
-        receiver_doc = null,
-        transaction_type,
-        ...rest
-      } = item;
-
-      let transformedItem = {
-        ...rest,
-        _id,
-        user_id,
-        transaction_id,
-        transaction_type,
-        transaction_number,
-        platform: platformName,
-      };
-
-      if (transaction_type === "send") {
-        transformedItem.sender = user_id;
-        if (receiver_doc?._id) {
-          transformedItem.receiver = receiver_doc.user_id;
-        } else {
-          transformedItem.receiver = "EXTERNAL";
-        }
-      }
-
-      return {
-        updateOne: {
-          filter: { _id },
-          update: { $set: transformedItem },
-          upsert: true,
-        },
-      };
-    });
-
-    const result = await db
-      .collection(kytCollectionName)
-      .bulkWrite(bulkOperations);
-
-    console.log(
-      `Receiver to sender mapping completed for platform: ${platformName}`
-    );
-    console.log(
-      `${result.matchedCount} documents matched, ${result.modifiedCount} updated, and ${result.upsertedCount} inserted into ${kytCollectionName}.`
-    );
-  } catch (error) {
-    console.error("Error during mapping receiver to sender:", error.message);
-    console.error(error);
-  }
-};
 
 // Function to group transaction based on remove duplicated and add send and rec both in one transaction
 const GropingTransaction = async function () {
@@ -445,12 +457,13 @@ const GropingTransaction = async function () {
 
     // Helper function to generate bulk operations
     const createBulkOperations = (data, uniqueField) =>
-      data.map(({ _id, ...rest }) => {
+      data.map(({ _id,transaction_usd_value ,...rest }) => {
+      if(!transaction_usd_value) transaction_usd_value = 0;
         const uniqueValue = rest[uniqueField];
         return {
           updateOne: {
             filter: { [uniqueField]: uniqueValue },
-            update: { $set: rest },
+            update: { $set: {transaction_usd_value,...rest} },
             upsert: true,
           },
         };
@@ -480,75 +493,6 @@ const GropingTransaction = async function () {
     console.log(
       `${result.matchedCount} documents matched, ${result.modifiedCount} updated, and ${result.upsertedCount} inserted into ${groupingKytCOllectionName}.`
     );
-  } catch (error) {
-    console.error("Error during grouping data insertion:", error.message);
-    console.error(error.stack);
-  }
-};
-
-const GropingTransactionBasedOnDate = async function () {
-  try {
-    console.log(
-      `Starting data mapping receiver to sender for platform: ${platformName}`
-    );
-
-    // Fetch grouped data
-    const records = await db
-      .collection(groupingKytCOllectionName)
-      .aggregate(groupTransactionFrequency)
-      .toArray();
-    const recordsYearWise = await db
-      .collection(groupingKytCOllectionName)
-      .aggregate(groupTransactionFrequencyYear)
-      .toArray();
-    if (!records.length) {
-      console.log("No data found for grouping.");
-      return;
-    }
-
-    // Helper function to generate bulk operations
-    const createBulkOperations = (data) =>
-      data.map(({ sender, receiver, coin_code, year, month, ...rest }) => {
-        return {
-          updateOne: {
-            filter: { sender, receiver, coin_code, year, month },
-            update: { $set: rest },
-            upsert: true,
-          },
-        };
-      });
-    // Helper function to generate bulk operations
-    const createBulkOperationsYear = (data) =>
-      data.map(({ sender, receiver, coin_code, year, ...rest }) => {
-        return {
-          updateOne: {
-            filter: { sender, receiver, coin_code, year,filter:'year'},
-            update: { $set: rest },
-            upsert: true,
-          },
-        };
-      });
-
-    // Prepare bulk operations
-    const bulkOperations = [...createBulkOperations(records),...createBulkOperationsYear(recordsYearWise)];
-
-    if (!bulkOperations.length) {
-      console.log("No bulk operations to perform.");
-      return;
-    }
-
-    // Execute bulkWrite
-    const result = await db
-      .collection(groupingByDateCollectionName)
-      .bulkWrite(bulkOperations);
-
-    // Log results
-    console.log(
-      `Grouping data insertion completed for platform: ${platformName}`
-    );
-    console.log(
-      `${result.matchedCount} documents matched, ${result.modifiedCount} updated, and ${result.upsertedCount} inserted into ${groupingKytCOllectionName}.`
-    );
     process.exit(0);
   } catch (error) {
     console.error("Error during grouping data insertion:", error.message);
@@ -556,13 +500,11 @@ const GropingTransactionBasedOnDate = async function () {
   }
 };
 
-// Execute migrations
 (async () => {
   await DataMigration_Network_refund();
   await DataMigration_Transaction_Id();
   await AddReceiverAddress();
   await AddSenderAddress();
   await AddSenderReceiverDetails();
-  // await GropingTransaction();
-  // await GropingTransactionBasedOnDate();
+  await GropingTransaction();
 })();
