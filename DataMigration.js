@@ -7,11 +7,10 @@ const {
   groupBasedOnTranSendAndRec,
   groupBasedOnRewardsRemoveDuplicate,
   groupOtherTransactionType,
-  groupTransactionFrequency,
-  groupTransactionFrequencyYear,
 } = require("./dataPipeline");
 
 const db = require("./db"); // Assuming this exports a connected MongoDB client
+const { userNameDetailsAdd } = require("./usernameAdd");
 
 const collectionName = "wallet_history";
 const kytCollectionName = "wallet_history_kyt";
@@ -186,6 +185,7 @@ const AddReceiverAddress = async function () {
         sender_doc = null,
         transaction_type,
         source_address,
+        platform,
         ...rest
       } = item;
 
@@ -198,14 +198,14 @@ const AddReceiverAddress = async function () {
         transaction_type,
         user_id,
         transaction_number,
-        platform: platformName,
+        platform
       };
 
       if (transaction_type === "receive") {
         if (transaction_number == "@IXFI-REWARDS") {
           // /(Referral|Rewards|Affiliate|referral|rewards|affiliate)/
           let sender = `${transaction_id}`;
-
+          transformedItem.platform=platformName;
           if (/(referral)/.test(transaction_id.toLowerCase()))
             sender = "@IXFI-REFERRAL-REWARDS";
           else if (/(affiliate)/.test(transaction_id.toLowerCase()))
@@ -216,7 +216,6 @@ const AddReceiverAddress = async function () {
           transformedItem = {
             _id,
             ...rest,
-            platform: platformName,
             transaction_number,
             sender,
             receiver: user_id,
@@ -245,14 +244,14 @@ const AddReceiverAddress = async function () {
           };
         } else if (!sender_doc?._id) {
           let senderExternalType = 'EXTERNAL';
-          if(!isNaN(parseInt(transaction_number, 10))) senderExternalType ='BINANCE';
-          if(transaction_number.length > 40) senderExternalType = 'SUPER_EXTERNAL';
+          if (!isNaN(parseInt(transaction_number, 10))) senderExternalType = 'BINANCE';
+          if (transaction_number.length > 40) senderExternalType = 'SUPER_EXTERNAL';
           transformedItem = {
             _id,
             ...rest,
             platform: senderExternalType,
             transaction_number,
-            sender:(senderExternalType==="SUPER_EXTERNAL")?source_address: senderExternalType, 
+            sender: (senderExternalType === "SUPER_EXTERNAL") ? source_address : senderExternalType,
             receiver: user_id,
           };
         } else {
@@ -263,9 +262,9 @@ const AddReceiverAddress = async function () {
             transaction_number,
             receiver: user_id,
           };
+
         }
       }
-
       return {
         updateOne: {
           filter: { _id },
@@ -316,7 +315,8 @@ const AddSenderAddress = async function () {
         transaction_id,
         receiver_doc = null,
         transaction_type,
-        destination_address=null,
+        destination_address = null,
+        platform,
         ...rest
       } = item;
 
@@ -327,23 +327,23 @@ const AddSenderAddress = async function () {
         transaction_id,
         transaction_type,
         transaction_number,
-        platform: platformName,
+        platform,
         destination_address
       };
 
       if (transaction_type === "send") {
         transformedItem.sender = user_id;
         if (receiver_doc?._id) {
+          transformedItem.platform=platformName;
           transformedItem.receiver = receiver_doc.user_id;
         } else {
           let receiverExternalType = 'EXTERNAL';
-          if(!isNaN(parseInt(transaction_number, 10))) receiverExternalType ='BINANCE';
-          if(transaction_number.length > 40) receiverExternalType = 'SUPER_EXTERNAL';
-          transformedItem.receiver = (receiverExternalType==="SUPER_EXTERNAL")?destination_address: receiverExternalType;
-          transformedItem.platform =receiverExternalType;
+          if (!isNaN(parseInt(transaction_number, 10))) receiverExternalType = 'BINANCE';
+          if (transaction_number.length > 40) receiverExternalType = 'SUPER_EXTERNAL';
+          transformedItem.receiver = (receiverExternalType === "SUPER_EXTERNAL") ? destination_address : receiverExternalType;
+          transformedItem.platform = receiverExternalType;
         }
       }
-
       return {
         updateOne: {
           filter: { _id },
@@ -457,13 +457,20 @@ const GropingTransaction = async function () {
 
     // Helper function to generate bulk operations
     const createBulkOperations = (data, uniqueField) =>
-      data.map(({ _id,transaction_usd_value ,...rest }) => {
-      if(!transaction_usd_value) transaction_usd_value = 0;
+      data.map(({ _id, transaction_usd_value, senderName, sender, receiver, receiverName, platform, transaction_type, ...rest }) => {
+        const { senderName: updatedSenderName, receiverName: updatedReceiverName } =
+          userNameDetailsAdd(platform, sender, receiver, senderName, receiverName, transaction_type);
+        if (!transaction_usd_value) transaction_usd_value = 0;
         const uniqueValue = rest[uniqueField];
         return {
           updateOne: {
             filter: { [uniqueField]: uniqueValue },
-            update: { $set: {transaction_usd_value,...rest} },
+            update: {
+              $set: {
+                transaction_usd_value,
+                senderName:updatedSenderName, sender, receiver, receiverName:updatedReceiverName, platform, transaction_type, ...rest
+              }
+            },
             upsert: true,
           },
         };
@@ -501,10 +508,10 @@ const GropingTransaction = async function () {
 };
 
 (async () => {
-  await DataMigration_Network_refund();
-  await DataMigration_Transaction_Id();
-  await AddReceiverAddress();
-  await AddSenderAddress();
+  // await DataMigration_Network_refund();
+  // await DataMigration_Transaction_Id();
+  // await AddReceiverAddress();
+  // await AddSenderAddress();
   await AddSenderReceiverDetails();
   await GropingTransaction();
 })();
