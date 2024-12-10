@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Enhanced Network Graph</title>
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
+    ></script>
+    <style type="text/css">
+      body {
+        font-family: "Arial", sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f9f9f9;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+
+      #mynetwork {
+        width: 90%;
+        height: 600px;
+        border: 2px solid #ccc;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background: linear-gradient(to bottom, #e0f7fa, #ffffff);
+        margin-bottom: 20px;
+      }
+
+      #details {
+        width: 90%;
+        max-width: 800px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background-color: #ffffff;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        display: none;
+      }
+
+      h3 {
+        font-size: 1.4em;
+        color: #00796b;
+        margin-bottom: 10px;
+      }
+
+      pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-size: 1em;
+        line-height: 1.6em;
+      }
+
+      .highlight {
+        color: #004d40;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="mynetwork"></div>
+    <div id="details">
+      <h3>Details</h3>
+      <pre id="detailsContent"></pre>
+    </div>
+
+    <script type="text/javascript">
+      // Integrate the given feature function
+      const adjustEdgeLengths = (network, edges) => {
+        const currentEdges = edges.get();
+        const nodePositions = network.getPositions();
+        const updates = []; // Collect updates in a batch for better performance
+
+        currentEdges.forEach((edge) => {
+          const fromNode = nodePositions[edge.from];
+          const toNode = nodePositions[edge.to];
+
+          if (fromNode && toNode) {
+            const distance = Math.sqrt(
+              Math.pow(toNode.x - fromNode.x, 2) + Math.pow(toNode.y - fromNode.y, 2)
+            );
+
+            // Adjust edge length only if it differs significantly
+            if (distance < 200 && edge.length !== distance + 100) {
+              updates.push({
+                id: edge.id,
+                length: distance + 100, // Dynamically adjust length
+              });
+            } else if (distance >= 200 && edge.length !== 300) {
+              updates.push({
+                id: edge.id,
+                length: 300, // Default length
+              });
+            }
+          }
+        });
+
+        // Batch update all edge changes for better performance
+        if (updates.length > 0) {
+          edges.update(updates);
+        }
+      };
+
+      async function fetchGraphData() {
+        let cypherString = `
+MATCH (s:Person)-[t:SEND]->(r:Person)
+WITH s, r,
+     // Convert the stringified JSON array into a list of JSON objects using fromJsonMap
+     [transaction IN t.transactions
+        | apoc.convert.fromJsonMap(transaction)
+     ] AS transactions
+WITH s, r,
+     // Filter transactions by date range and coin_code
+     [txn IN transactions
+        WHERE date(txn.date) >= date('2022-12-01')
+        AND date(txn.date) <= date('2024-01-30')
+        AND txn.coin_code = 'usdt'
+     ] AS filteredTransactions
+WITH s, r, filteredTransactions,
+     // Collect the filtered transactions into an array as transaction history
+     COLLECT(filteredTransactions) AS transactionHistory,
+     // Calculate total USD and count of filtered transactions
+     REDUCE(totalValue = 0.0, txn IN filteredTransactions | totalValue + toFloat(txn.transaction_usd_value)) AS totalUsd,
+     SIZE(filteredTransactions) AS transactionCount
+WHERE totalUsd > 0
+// Create virtual relationship with the computed data
+CALL apoc.create.vRelationship(s, 'VIRTUAL_SEND', {
+    total_amount: totalUsd,
+    transaction_count: transactionCount,
+    coin_code: 'usdt',
+    receiverName: r.name,
+    transactions: apoc.convert.toJson(transactionHistory), // Save entire filtered transactions as history
+    senderName: s.name,
+    senderEmail: s.email,
+    receiverEmail: r.email
+}, r) YIELD rel
+RETURN rel, s, r LIMIT 10
+        `;
+
+        try {
+          let response = await fetch("http://localhost:7474/db/neo4j/tx", {
+            method: "POST",
+            headers: {
+              Authorization: "Basic " + btoa("neo4j:root@123"),
+              "Content-Type": "application/json",
+              Accept: "application/json;charset=UTF-8",
+            },
+            body: JSON.stringify({
+              statements: [
+                {
+                  statement: cypherString,
+                  resultDataContents: ["graph", "row"],
+                },
+              ],
+            }),
+          });
+
+          if (!response.ok) {
+            console.error("HTTP Error:", response.statusText);
+            return;
+          }
+
+          let jsonResponse = await response.json();
+          console.log("Neo4j Response:", jsonResponse);
+
+          if (
+            !jsonResponse.results ||
+            !jsonResponse.results[0] ||
+            !jsonResponse.results[0].data
+          ) {
+            console.error("Unexpected response format:", jsonResponse);
+            return;
+          }
+
+          let graphData = jsonResponse.results[0].data;
+
+          let nodes = new vis.DataSet();
+          let edges = new vis.DataSet();
+
+          graphData.forEach((data) => {
+            let graph = data.graph;
+
+            // Add nodes
+            graph.nodes.forEach((node) => {
+              if (!nodes.get(node.id)) {
+                nodes.add({
+                  id: node.id,
+                  label: node.properties.username || node.labels[0],
+                  userId: node.properties.userId,
+                  email: node.properties.email || "Not Available",
+                  username: node.properties.username || "Not Available",
+                  color: node.properties.userId ? "#0288d1" : "#388e3c",
+                  font: { color: " #77773c" },
+                  size: 30,
+                });
+              }
+            });
+
+            //  width property
+            const MIN_WIDTH = 1; // Smallest edge width
+            const MAX_WIDTH = 10; // Largest edge width
+
+            // Scaling function to map transaction count to width
+            function scaleWidth(
+              transactionCount,
+              min = MIN_WIDTH,
+              max = MAX_WIDTH
+            ) {
+              const MIN_COUNT = 1; // Minimum possible transaction count
+              const MAX_COUNT = 100; // Maximum transaction count to consider
+              const clampedCount = Math.max(
+                MIN_COUNT,
+                Math.min(transactionCount, MAX_COUNT)
+              ); // Clamp values
+              return (
+                ((clampedCount - MIN_COUNT) / (MAX_COUNT - MIN_COUNT)) *
+                (max - min) +
+                min
+              ) * 2; // Multiply the result by 2
+            }
+
+            // Add edges
+            graph.relationships.forEach((relationship) => {
+              const transactionCount = relationship.properties.transaction_count || 0;
+              const edgeWidth = scaleWidth(transactionCount);
+
+              edges.add({
+                id: relationship.id,
+                from: relationship.startNode,
+                to: relationship.endNode,
+                label: transactionCount.toString(),
+                arrows: { to: { enabled: true, scaleFactor: 1.5 } },
+                color: {
+                  color: "#75ab75",
+                  highlight: "linear-gradient(to right, #ff5722, #ff9800)",
+                  hover: "#ff9800",
+                },
+                dashes: [10, 5],
+                font: {
+                  align: "horizontal",
+                  size: 20,
+                  color: "#333",
+                  bold: true,
+                },
+                smooth: {
+                  enabled: true,
+                  type: "cubicBezier",
+                  roundness: 0.5,
+                },
+                shadow: {
+                  enabled: true,
+                  color: "rgba(0, 0, 0, 0.3)",
+                  size: 10,
+                  x: 5,
+                  y: 5,
+                },
+                width: edgeWidth,
+                title: `
+                  <div style="padding: 8px; font-size: 12px;">
+                    <strong>Transaction Count:</strong> ${transactionCount}<br>
+                    <strong>Total Amount:</strong> ${relationship.properties.total_amount || 0}<br>
+                    <strong>Sender:</strong> ${relationship.properties.senderName || "Unknown"}<br>
+                    <strong>Receiver:</strong> ${relationship.properties.receiverName || "Unknown"}<br>
+                    <strong>Platform:</strong> ${relationship.properties.platform || "Not Available"}
+                  </div>
+                `,
+                transactions: relationship.properties.transactions || [],
+                senderName: relationship.properties.senderName || "Unknown",
+                senderEmail: relationship.properties.senderEmail || "Unknown Email",
+                receiverName: relationship.properties.receiverName || "Unknown",
+                receiverEmail: relationship.properties.receiverEmail || "Unknown Email",
+                platform: relationship.properties.platform || "Not Available",
+                source_address:
+                  relationship.properties.source_address || "Not Available",
+                destination_address:
+                  relationship.properties.destination_address || "Not Available",
+              });
+            });
+          });
+
+          // Create network visualization
+          var container = document.getElementById("mynetwork");
+          var data = { nodes: nodes, edges: edges };
+          var options = {
+            nodes: {
+              shape: "dot",
+              size: 20,
+              font: { size: 16, color: "#343434" },
+              borderWidth: 2,
+              scaling: { min: 20, max: 40 },
+            },
+            edges: {
+              width: 2,
+              smooth: { type: "continuous", roundness: 0.5 },
+            },
+            interaction: { hover: true, dragNodes: true, zoomView: true },
+            physics: {
+              enabled: true,
+              solver: "forceAtlas2Based",
+              forceAtlas2Based: {
+                gravitationalConstant: -50,
+                centralGravity: 0.01,
+                springLength: 200,
+                springConstant: 0.08,
+              },
+              stabilization: {
+                iterations: 200,
+                updateInterval: 50,
+              },
+              maxVelocity: 50,
+              minVelocity: 0.1,
+              adaptiveTimestep: true,
+            },
+          };
+
+          var network = new vis.Network(container, data, options);
+
+          network.on("stabilizationIterationsDone", function () {
+            network.setOptions({ physics: false });
+            // After layout stabilization, adjust edge lengths
+            adjustEdgeLengths(network, edges);
+          });
+
+          // When the user finishes dragging a node, adjust edge lengths again
+          network.on("dragEnd", function () {
+            adjustEdgeLengths(network, edges);
+          });
+
+          // Handle node and edge clicks
+          network.on("click", function (params) {
+            let detailsDiv = document.getElementById("details");
+            let detailsContent = document.getElementById("detailsContent");
+
+            if (params.nodes.length > 0) {
+              let nodeId = params.nodes[0];
+              let nodeData = nodes.get(nodeId);
+              console.log("Node Data:", nodeData);
+              detailsDiv.style.display = "block";
+              detailsContent.innerHTML = `
+                <p><strong class="highlight">Node ID:</strong> ${nodeData.id}</p>
+                <p><strong class="highlight">Label:</strong> ${nodeData.label}</p>
+                <p><strong class="highlight">User Id:</strong> ${nodeData.userId}</p>
+                <p><strong class="highlight">Username:</strong> ${nodeData.username}</p>
+                <p><strong class="highlight">Email:</strong> ${nodeData.email}</p>
+              `;
+            } else if (params.edges.length > 0) {
+              let edgeId = params.edges[0];
+              let edgeData = edges.get(edgeId);
+              console.log("Edge Data:", edgeData);
+              detailsDiv.style.display = "block";
+              detailsContent.innerHTML = `
+                <p><strong class="highlight">Transactions:</strong> ${
+                  JSON.stringify(edgeData.transactions) || "Not Available"
+                }</p>
+                <p><strong class="highlight">Total Amount:</strong> ${
+                  edgeData.total_amount || "Not Available"
+                }</p>
+                <p><strong class="highlight">Transaction Count:</strong> ${
+                  edgeData.transaction_count || "Not Available"
+                }</p>
+                <p><strong class="highlight">Sender:</strong> ${
+                  edgeData.senderName || "Unknown"
+                } (${edgeData.senderEmail})</p>
+                <p><strong class="highlight">Receiver:</strong> ${
+                  edgeData.receiverName || "Unknown"
+                } (${edgeData.receiverEmail})</p>
+                <p><strong class="highlight">Platform:</strong> ${
+                  edgeData.platform || "Not Available"
+                }</p>
+                <p><strong class="highlight">Source Address:</strong> ${
+                  edgeData.source_address || "Not Available"
+                }</p>
+                <p><strong class="highlight">Destination Address:</strong> ${
+                  edgeData.destination_address || "Not Available"
+                }</p>
+              `;
+            } else {
+              detailsDiv.style.display = "none";
+            }
+          });
+        } catch (error) {
+          console.error("Error fetching data from Neo4j:", error);
+        }
+      }
+
+      fetchGraphData();
+    </script>
+  </body>
+</html>

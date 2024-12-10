@@ -456,32 +456,49 @@ const GropingTransaction = async function () {
     }
 
     // Helper function to generate bulk operations
-    const createBulkOperations = (data, uniqueField) =>
-      data.map(({ _id, transaction_usd_value, senderName, sender, receiver, receiverName, platform, transaction_type, ...rest }) => {
+    const createBulkOperations = (data, uniqueFields) =>
+      data.map((dataItem) => {
+        const { _id, transaction_usd_value, senderName, sender, receiver, receiverName, platform, transaction_type, ...rest } = dataItem;
+    
         const { senderName: updatedSenderName, receiverName: updatedReceiverName } =
           userNameDetailsAdd(platform, sender, receiver, senderName, receiverName, transaction_type);
-        if (!transaction_usd_value) transaction_usd_value = 0;
-        const uniqueValue = rest[uniqueField];
+    
+        const uniqueFilter = uniqueFields.reduce((filter, field) => {
+          if (rest[field] !== undefined) {
+            filter[field] = rest[field];
+          } else if (field in dataItem) { // Check if the field exists outside `rest`
+            filter[field] = dataItem[field];
+          }
+          return filter;
+        }, {});
+    
         return {
           updateOne: {
-            filter: { [uniqueField]: uniqueValue },
+            filter: uniqueFilter,
             update: {
               $set: {
-                transaction_usd_value,
-                senderName:updatedSenderName, sender, receiver, receiverName:updatedReceiverName, platform, transaction_type, ...rest
-              }
+                transaction_usd_value: transaction_usd_value || 0,
+                senderName: updatedSenderName,
+                sender,
+                receiver,
+                receiverName: updatedReceiverName,
+                platform,
+                transaction_type,
+                ...rest,
+              },
             },
             upsert: true,
           },
         };
       });
-
+    
     // Prepare bulk operations
     const bulkOperations = [
-      ...createBulkOperations(sendRecTrans, "transaction_number"),
-      ...createBulkOperations(otherTrans, "transaction_id"),
-      ...createBulkOperations(rewardsTrans, "transaction_id"),
+      ...createBulkOperations(sendRecTrans, ["transaction_number","platform"]),
+      ...createBulkOperations(otherTrans, ["transaction_id","platform"]),
+      ...createBulkOperations(rewardsTrans, ["transaction_id", "platform"]), // Example with multiple unique fields
     ];
+    
 
     if (!bulkOperations.length) {
       console.log("No bulk operations to perform.");

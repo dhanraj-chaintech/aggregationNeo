@@ -1,40 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <title>Enhanced Network Graph</title>
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
+    ></script>
+    <style type="text/css">
+      body {
+        font-family: "Arial", sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f9f9f9;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
 
-<head>
-  <title>Network Graph</title>
-  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-  <style type="text/css">
-    #mynetwork {
-      width: 1600px;
-      height: 700px;
-      border: 1px solid rgb(3, 14, 0);
-    }
-   code {
-      width: 600px !important;
-      overflow-y: scroll;
-      overflow-x: hidden;
-    }
-  </style>
-</head>
+      #mynetwork {
+        width: 90%;
+        height: 600px;
+        border: 2px solid #ccc;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background: linear-gradient(to bottom, #e0f7fa, #ffffff);
+        margin-bottom: 20px;
+      }
 
-<body>
-  <div id="mynetwork"></div>
-  <div id="details" style="
-        margin-top: 20px;
-        font-family: Tahoma, sans-serif;
-        border: 1px solid #ccc;
-        padding: 10px;
+      #details {
+        width: 90%;
+        max-width: 800px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background-color: #ffffff;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        padding: 20px;
         display: none;
-      ">
-    <h3>Details</h3>
-    <pre id="detailsContent" style="white-space: pre-wrap"></pre>
-  </div>
+      }
 
-  <script type="text/javascript">
-    async function fetchGraphData() {
-      let cypherString = `
-MATCH (s:Person)-[t:SEND]->(r:Person)
+      h3 {
+        font-size: 1.4em;
+        color: #00796b;
+        margin-bottom: 10px;
+      }
+
+      pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-size: 1em;
+        line-height: 1.6em;
+      }
+
+      .highlight {
+        color: #004d40;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="mynetwork"></div>
+    <div id="details">
+      <h3>Details</h3>
+      <pre id="detailsContent"></pre>
+    </div>
+
+    <script type="text/javascript">
+      async function fetchGraphData() {
+        let cypherString = `
+MATCH (s:Person)-[t:SEND]->(r:Person)  where s.username="rishi0007" AND r.username="ccptest"
 WITH s, r, 
      // Convert the stringified JSON array into a list of JSON objects using fromJsonMap
      [transaction IN t.transactions 
@@ -43,7 +78,7 @@ WITH s, r,
 WITH s, r, 
      // Filter transactions by date range and coin_code
      [txn IN transactions
-        WHERE date(txn.date) >= date('2022-12-01') 
+        WHERE date(txn.date) >= date('2022-06-01') 
         AND date(txn.date) <= date('2024-01-30') 
         AND txn.coin_code = 'usdt'
      ] AS filteredTransactions
@@ -56,240 +91,261 @@ WITH s, r, filteredTransactions,
 WHERE totalUsd > 0
 // Create virtual relationship with the computed data
 CALL apoc.create.vRelationship(s, 'VIRTUAL_SEND', {
-    totalUsd: totalUsd,
-    transactionCount: transactionCount,
+    total_amount: totalUsd,
+    transaction_count: transactionCount,
     coin_code: 'usdt',
     receiverName: r.name,
-    transactionHistory: apoc.convert.toJson(transactionHistory), // Save entire filtered transactions as history
+    transactions: apoc.convert.toJson(transactionHistory), // Save entire filtered transactions as history
     senderName: s.name,
     senderEmail: s.email,
     receiverEmail: r.email
 }, r) YIELD rel
-RETURN rel, s,r limit 50
+RETURN rel, s,r LIMIT 10
+        `;
 
+        try {
+          let response = await fetch("http://localhost:7474/db/neo4j/tx", {
+            method: "POST",
+            headers: {
+              Authorization: "Basic " + btoa("neo4j:root@123"),
+              "Content-Type": "application/json",
+              Accept: "application/json;charset=UTF-8",
+            },
+            body: JSON.stringify({
+              statements: [
+                {
+                  statement: cypherString,
+                  resultDataContents: ["graph", "row"],
+                },
+              ],
+            }),
+          });
 
-      `;
+          if (!response.ok) {
+            console.error("HTTP Error:", response.statusText);
+            return;
+          }
 
-      try {
-        let response = await fetch("http://localhost:7474/db/neo4j/tx", {
-          method: "POST",
-          headers: {
-            Authorization: "Basic " + btoa("neo4j:root@123"),
-            "Content-Type": "application/json",
-            Accept: "application/json;charset=UTF-8",
-          },
-          body:
-            '{"statements":[{"statement":"' +
-            cypherString
-              .replace(/(\r\n|\n|\r)/gm, "\\n")
-              .replace(/"/g, '\\"') +
-            '", "resultDataContents":["graph", "row"]}]}',
-        });
+          let jsonResponse = await response.json();
+          console.log("Neo4j Response:", jsonResponse);
 
-        if (!response.ok) {
-          console.error("HTTP Error: ", response.statusText);
-          return;
-        }
+          if (
+            !jsonResponse.results ||
+            !jsonResponse.results[0] ||
+            !jsonResponse.results[0].data
+          ) {
+            console.error("Unexpected response format:", jsonResponse);
+            return;
+          }
 
-        let jsonResponse = await response.json();
-        console.log(jsonResponse);
-        
-        if (
-          !jsonResponse.results ||
-          !jsonResponse.results[0] ||
-          !jsonResponse.results[0].data
-        ) {
-          console.error("Unexpected response format:", jsonResponse);
-          return;
-        }
+          let graphData = jsonResponse.results[0].data;
 
-        let graphData = jsonResponse.results[0].data;
+          let nodes = new vis.DataSet();
+          let edges = new vis.DataSet();
 
-        // Prepare nodes and edges for vis-network
-        let nodes = new vis.DataSet();
-        let edges = new vis.DataSet();
+          graphData.forEach((data) => {
+            let graph = data.graph;
 
-        graphData.forEach((data) => {
-          let graph = data.graph;
+            // Add nodes
+            graph.nodes.forEach((node) => {
+              if (!nodes.get(node.id)) {
+                nodes.add({
+                  id: node.id,
+                  label: node.properties.username || node.labels[0],
+                  userId: node.properties.userId,
+                  email: node.properties.email || "Not Available",
+                  username: node.properties.username || "Not Available",
+                  color: node.properties.userId ? "#0288d1" : "#388e3c",
+                  font: { color: " #77773c" },
+                  size: 30,
+                });
+              }
+            });
 
-          // Add nodes
-          graph.nodes.forEach((node) => {
-            if (!nodes.get(node.id)) {
-              nodes.add({
-                id: node.id,
-                label: node.properties.userId || node.labels[0],
-                email: node.properties.email,
-                username: node.properties.username,
-                color: node.properties.userId
-                  ? "rgb(85, 180, 232)"
-                  : "rgb(31, 99, 14)",
-              });
+            //  width property
+            const MIN_WIDTH = 1; // Smallest edge width
+            const MAX_WIDTH = 10; // Largest edge width
+
+            // Scaling function to map transaction count to width
+           // Scaling function to map transaction count to width and multiply by 2
+function scaleWidth(
+  transactionCount,
+  min = MIN_WIDTH,
+  max = MAX_WIDTH
+) {
+  const MIN_COUNT = 1; // Minimum possible transaction count
+  const MAX_COUNT = 100; // Maximum transaction count to consider
+  const clampedCount = Math.max(
+    MIN_COUNT,
+    Math.min(transactionCount, MAX_COUNT)
+  ); // Clamp values
+  return (
+    ((clampedCount - MIN_COUNT) / (MAX_COUNT - MIN_COUNT)) *
+      (max - min) +
+    min
+  ) * 2; // Multiply the result by 2
+}
+ // Add edges
+ graph.relationships.forEach((relationship) => {
+  const transactionCount = relationship.properties.transaction_count || 0;
+
+  // Determine the width dynamically based on transaction count
+  const edgeWidth = scaleWidth(transactionCount);
+
+  edges.add({
+    id: relationship.id,
+    from: relationship.startNode,
+    to: relationship.endNode,
+    label: relationship.type,
+    // label: transactionCount.toString(),
+    arrows: { to: { enabled: true, scaleFactor: 1.5 } }, // Slightly larger arrowheads
+    color: {
+      color: "#75ab75",
+      highlight: "linear-gradient(to right, #ff5722, #ff9800)", // Gradient for hover
+      hover: "#ff9800",
+    },
+    dashes: [10, 5], // Dashed line style
+    font: {
+      align: "horizontal",
+      size: 10, // Larger text size for clarity
+      color: "#333", // Neutral text color
+      bold: true, // Bold text
+    },
+    smooth: {
+      enabled: true, // Smooth curved edges
+      type: "cubicBezier", // Smooth bezier curves
+      roundness: 0.5, // Adjust the curvature
+    },
+    shadow: {
+      enabled: true,
+      color: "rgba(0, 0, 0, 0.3)", // Subtle shadow
+      size: 10,
+      x: 5,
+      y: 5,
+    },
+    width: edgeWidth, // Dynamically scaled width
+    title: `
+      <div style="padding: 8px; font-size: 12px;">
+        <strong>Transaction Count:</strong> ${transactionCount}<br>
+        <strong>Total Amount:</strong> ${relationship.properties.total_amount || 0}<br>
+        <strong>Sender:</strong> ${relationship.properties.senderName || "Unknown"}<br>
+        <strong>Receiver:</strong> ${relationship.properties.receiverName || "Unknown"}<br>
+        <strong>Platform:</strong> ${relationship.properties.platform || "Not Available"}
+      </div>
+    `, // Tooltip with rich content
+    transactions: relationship.properties.transactions || [],
+    senderName: relationship.properties.senderName || "Unknown",
+    senderEmail: relationship.properties.senderEmail || "Unknown Email",
+    receiverName: relationship.properties.receiverName || "Unknown",
+    receiverEmail: relationship.properties.receiverEmail || "Unknown Email",
+    platform: relationship.properties.platform || "Not Available",
+    source_address: relationship.properties.source_address || "Not Available",
+    destination_address: relationship.properties.destination_address || "Not Available",
+  });
+});
+
+          });
+
+          // Create network visualization
+          var container = document.getElementById("mynetwork");
+          var data = { nodes: nodes, edges: edges };
+          var options = {
+            nodes: {
+              shape: "dot",
+              size: 20,
+              font: { size: 16, color: "#343434" },
+              borderWidth: 2,
+              scaling: { min: 20, max: 40 },
+            },
+            edges: {
+              width: 2,
+              smooth: { type: "continuous", roundness: 0.5 },
+            },
+            interaction: { hover: true, dragNodes: true, zoomView: true },
+            physics: {
+              enabled: true,
+              solver: "forceAtlas2Based",
+              forceAtlas2Based: {
+                gravitationalConstant: -50,
+                centralGravity: 0.01,
+                springLength: 200,
+                springConstant: 0.08,
+              },
+              stabilization: {
+                iterations: 200,
+                updateInterval: 50,
+              },
+              maxVelocity: 50,
+              minVelocity: 0.1,
+              adaptiveTimestep: true,
+            },
+          };
+
+          var network = new vis.Network(container, data, options);
+
+          network.on("stabilizationIterationsDone", function () {
+            network.setOptions({ physics: false });
+          });
+
+          // Handle node and edge clicks
+          network.on("click", function (params) {
+            let detailsDiv = document.getElementById("details");
+            let detailsContent = document.getElementById("detailsContent");
+
+            if (params.nodes.length > 0) {
+              let nodeId = params.nodes[0];
+              let nodeData = nodes.get(nodeId);
+              console.log("Node Data:", nodeData);
+              detailsDiv.style.display = "block";
+              detailsContent.innerHTML = `
+                <p><strong class="highlight">Node ID:</strong> ${nodeData.id}</p>
+                <p><strong class="highlight">Label:</strong> ${nodeData.label}</p>
+                <p><strong class="highlight">User Id:</strong> ${nodeData.userId}</p>
+                <p><strong class="highlight">Username:</strong> ${nodeData.username}</p>
+                <p><strong class="highlight">Email:</strong> ${nodeData.email}</p>
+              `;
+            } else if (params.edges.length > 0) {
+              let edgeId = params.edges[0];
+              let edgeData = edges.get(edgeId);
+              console.log("Edge Data:", edgeData);
+              detailsDiv.style.display = "block";
+              detailsContent.innerHTML = `
+                <p><strong class="highlight">Transactions:</strong> ${
+                  JSON.stringify(edgeData.transactions) || "Not Available"
+                }</p>
+                <p><strong class="highlight">Total Amount:</strong> ${
+                  edgeData.total_amount || "Not Available"
+                }</p>
+                <p><strong class="highlight">Transaction Count:</strong> ${
+                  edgeData.transaction_count || "Not Available"
+                }</p>
+                <p><strong class="highlight">Sender:</strong> ${
+                  edgeData.senderName || "Unknown"
+                } (${edgeData.senderEmail})</p>
+                <p><strong class="highlight">Receiver:</strong> ${
+                  edgeData.receiverName || "Unknown"
+                } (${edgeData.receiverEmail})</p>
+                <p><strong class="highlight">Platform:</strong> ${
+                  edgeData.platform || "Not Available"
+                }</p>
+                <p><strong class="highlight">Source Address:</strong> ${
+                  edgeData.source_address || "Not Available"
+                }</p>
+                <p><strong class="highlight">Destination Address:</strong> ${
+                  edgeData.destination_address || "Not Available"
+                }</p>
+              `;
+            } else {
+              detailsDiv.style.display = "none";
             }
           });
-
-          // Add edges (relationships)
-          graph.relationships.forEach((relationship) => {
-            edges.add({
-              from: relationship.startNode,
-              to: relationship.endNode,
-              label: relationship.type,
-              arrows: { to: { enabled: true, scaleFactor: 1 } },
-              color: {
-                color: "black",
-                highlight: "blue",
-                hover: "blue",
-              },
-              transaction_type: relationship.properties.transaction_type,
-              total_amount: relationship.properties.total_amount,
-              coin_code: relationship.properties.coin_code,
-              transaction: relationship.properties.transaction,
-              transaction_status: relationship.properties.transaction_status,
-              senderName: relationship.properties.senderName,
-              senderEmail: relationship.properties.senderEmail,
-              receiverName: relationship.properties.receiverName,
-              receiverEmail: relationship.properties.receiverEmail,
-              transaction_count: relationship.properties.transaction_count,
-              transactions: relationship.properties.transactions,
-              month:relationship.properties.month,
-              year:relationship.properties.year,
-              dashes: true,
-              // Add properties to edges
-              title: `Transaction Type: ${relationship.properties.transaction_type || "Not Available"
-                } Amount: ${relationship.properties.total_amount || "Not Available"
-                }Coin: ${relationship.properties.coin_code || "Not Available"
-                } MM-YY:${relationship.properties.month || "Not Available"} ${relationship.properties.year || "Not Available"
-                } Sender: ${relationship.properties.senderName || "Not Available"
-                } (${relationship.properties.senderEmail || "Not Available"
-                }) Receiver: ${relationship.properties.receiverName || "Not Available"
-                } (${relationship.properties.receiverEmail || "Not Available"
-                }) Transaction Count: ${relationship.properties.transaction_count || "Not Available"
-                }`,
-            });
-          });
-        });
-
-        // Create the network visualization
-        var container = document.getElementById("mynetwork");
-        var data = {
-          nodes: nodes,
-          edges: edges,
-        };
-        var options = {
-          nodes: {
-            shape: "dot",
-            size: 20,
-            font: {
-              size: 15,
-              face: "Tahoma",
-            },
-            borderWidth: 2,
-          },
-          edges: {
-            width: 2,
-            smooth: {
-              type: "continuous",
-            },
-          },
-          interaction: {
-            hover: true,
-            dragNodes: true,
-            zoomView: true,
-          },
-          physics: {
-            enabled: true,
-            forceAtlas2Based: {
-              gravitationalConstant: -26,
-              centralGravity: 0.005,
-              springLength: 230,
-              springConstant: 0.18,
-            },
-            maxVelocity: 146,
-            solver: "forceAtlas2Based",
-            timestep: 0.35,
-            stabilization: {
-              enabled: true,
-              iterations: 1000,
-              updateInterval: 25,
-            },
-          },
-          layout: {
-            improvedLayout: false,
-          },
-        };
-        var network = new vis.Network(container, data, options);
-
-        // After the network is stabilized, turn off the physics to freeze the layout
-        network.on("stabilizationIterationsDone", function () {
-          network.setOptions({ physics: false });
-        });
-
-        // Handle click on nodes and edges
-        network.on("click", function (params) {
-          let detailsDiv = document.getElementById("details");
-          let detailsContent = document.getElementById("detailsContent");
-
-          // Handle node click
-          if (params.nodes.length > 0) {
-            let nodeId = params.nodes[0];
-            let nodeData = nodes.get(nodeId);
-            detailsDiv.style.display = "block";
-            detailsContent.innerHTML = `
-              <p><strong>Node ID:</strong> ${nodeData.id}</p>
-              <p><strong>Label:</strong> ${nodeData.label}</p>
-              <p><strong>Username:</strong> ${nodeData.username || "Not Available"
-              }</p>
-              <p><strong>Email:</strong> ${nodeData.email || "Not Available"
-              }</p>
-            `;
-          }
-          // Handle edge (relationship) click
-          else if (params.edges.length > 0) {
-            let edgeId = params.edges[0];
-            let edgeData = edges.get(edgeId);
-            console.log(edgeData);
-
-            detailsDiv.style.display = "block";
-            detailsContent.innerHTML = `
-  <p><strong>Edge ID:</strong> ${edgeData.id || "Not Available"}</p>
-  <p><strong>Transaction Type:</strong> ${edgeData.transaction_type || "Not Available"
-              }</p>
-  <p><strong>Transaction Amount:</strong> ${edgeData.total_amount || "Not Available"
-              }</p>
-  <p><strong>Coin:</strong> ${edgeData.coin_code || "Not Available"}</p>
-  <p><strong>Sender:</strong> ${edgeData.senderName || "Not Available"} (${edgeData.senderEmail || "Not Available"
-              })</p>
-  <p><strong>Receiver:</strong> ${edgeData.receiverName || "Not Available"} (${edgeData.receiverEmail || "Not Available"
-              })</p>
-  <p>Transaction Count:${edgeData.transaction_count || "Not Available"}</p>
-  <p>Date MM-YY : ${edgeData.month || "Not Available"}/${edgeData.year || "Not Available"}</p>
-  <p><strong>Transactions:</strong></p>
- <code><p><strong>Transactions:</strong></p>
-    <ul>
-    ${ JSON.parse(edgeData.transactions).map((transaction, index) => 
-            `<li><strong>Transaction ${index + 1}:</strong>
-              <ul>
-                ${Object.entries(transaction).map(([key, value]) => 
-                  `<li><strong>${key}:</strong> ${value || "Not Available"}</li>`
-                ).join('')}
-              </ul>
-            </li>`
-          ).join('')
-    }
-    </ul></code>
-`; console.log({data:edgeData.transactions})
-          } else {
-            // If clicked outside nodes or edges, hide the details
-            detailsDiv.style.display = "none";
-          }
-        });
-      } catch (error) {
-        console.error("Error fetching data from Neo4j:", error);
+        
+        } catch (error) {
+          console.error("Error fetching data from Neo4j:", error);
+        }
       }
-    }
 
-    // Fetch and display the data
-    fetchGraphData();
-  </script>
-</body>
-
+      fetchGraphData();
+    </script>
+  </body>
 </html>
