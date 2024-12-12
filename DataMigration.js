@@ -7,6 +7,7 @@ const {
   groupBasedOnTranSendAndRec,
   groupBasedOnRewardsRemoveDuplicate,
   groupOtherTransactionType,
+  BinanceUserMapping,
 } = require("./dataPipeline");
 
 const db = require("./db"); // Assuming this exports a connected MongoDB client
@@ -198,14 +199,14 @@ const AddReceiverAddress = async function () {
         transaction_type,
         user_id,
         transaction_number,
-        platform
+        platform,
       };
 
       if (transaction_type === "receive") {
         if (transaction_number == "@IXFI-REWARDS") {
           // /(Referral|Rewards|Affiliate|referral|rewards|affiliate)/
           let sender = `${transaction_id}`;
-          transformedItem.platform=platformName;
+          transformedItem.platform = platformName;
           if (/(referral)/.test(transaction_id.toLowerCase()))
             sender = "@IXFI-REFERRAL-REWARDS";
           else if (/(affiliate)/.test(transaction_id.toLowerCase()))
@@ -243,15 +244,20 @@ const AddReceiverAddress = async function () {
             receiver: user_id,
           };
         } else if (!sender_doc?._id) {
-          let senderExternalType = 'EXTERNAL';
-          if (!isNaN(parseInt(transaction_number, 10))) senderExternalType = 'BINANCE';
-          if (transaction_number.length > 40) senderExternalType = 'SUPER_EXTERNAL';
+          let senderExternalType = "EXTERNAL";
+          if (!isNaN(parseInt(transaction_number, 10)))
+            senderExternalType = "BINANCE";
+          if (transaction_number.length > 40)
+            senderExternalType = "SUPER_EXTERNAL";
           transformedItem = {
             _id,
             ...rest,
             platform: senderExternalType,
             transaction_number,
-            sender: (senderExternalType === "SUPER_EXTERNAL") ? source_address : senderExternalType,
+            sender:
+              senderExternalType === "SUPER_EXTERNAL"
+                ? source_address
+                : senderExternalType,
             receiver: user_id,
           };
         } else {
@@ -262,7 +268,6 @@ const AddReceiverAddress = async function () {
             transaction_number,
             receiver: user_id,
           };
-
         }
       }
       return {
@@ -328,19 +333,24 @@ const AddSenderAddress = async function () {
         transaction_type,
         transaction_number,
         platform,
-        destination_address
+        destination_address,
       };
 
       if (transaction_type === "send") {
         transformedItem.sender = user_id;
         if (receiver_doc?._id) {
-          transformedItem.platform=platformName;
+          transformedItem.platform = platformName;
           transformedItem.receiver = receiver_doc.user_id;
         } else {
-          let receiverExternalType = 'EXTERNAL';
-          if (!isNaN(parseInt(transaction_number, 10))) receiverExternalType = 'BINANCE';
-          if (transaction_number.length > 40) receiverExternalType = 'SUPER_EXTERNAL';
-          transformedItem.receiver = (receiverExternalType === "SUPER_EXTERNAL") ? destination_address : receiverExternalType;
+          let receiverExternalType = "EXTERNAL";
+          if (!isNaN(parseInt(transaction_number, 10)))
+            receiverExternalType = "BINANCE";
+          if (transaction_number.length > 40)
+            receiverExternalType = "SUPER_EXTERNAL";
+          transformedItem.receiver =
+            receiverExternalType === "SUPER_EXTERNAL"
+              ? destination_address
+              : receiverExternalType;
           transformedItem.platform = receiverExternalType;
         }
       }
@@ -426,6 +436,72 @@ const AddSenderReceiverDetails = async function () {
     console.error(error);
   }
 };
+const BinaceUserMappingFunc = async function () {
+  try {
+    console.log(
+      "Starting data mapping receiver to sender for platform: Binance"
+    );
+
+    const data = await db
+      .collection(kytCollectionName)
+      .aggregate(BinanceUserMapping)
+      .toArray();
+
+    if (data.length === 0) {
+      console.log("No data found for mapping.");
+      return;
+    }
+
+    const bulkOperations = data
+      .map((dataItem) => {
+        if (dataItem.result.length === 0)
+          return {
+            updateOne: {
+              filter: { _id: dataItem._id },
+              update: {
+                $set: {
+                  receiver: dataItem.destination_address,
+                },
+              },
+              upsert: true,
+            },
+          };
+        const receiverItem = dataItem.result[0];
+        return {
+          updateOne: {
+            filter: { _id: dataItem._id },
+            update: {
+              $set: {
+                receiver: receiverItem.sender,
+                receiverName: receiverItem.senderName,
+                receiverEmail: receiverItem.senderEmail,
+                platform: "IXFI",
+              },
+            },
+            upsert: true,
+          },
+        };
+      })
+      .filter((operation) => operation !== null); // Remove null entries
+
+    if (bulkOperations.length === 0) {
+      console.log("No valid operations to process.");
+      return;
+    }
+
+    const result = await db
+      .collection(kytCollectionName)
+      .bulkWrite(bulkOperations);
+
+    console.log("Data mapping sender and receiver in Binance sent");
+    console.log(
+      `${result.matchedCount} documents matched, ${result.modifiedCount} updated, and ${result.upsertedCount} inserted into ${kytCollectionName}.`
+    );
+  } catch (error) {
+    console.error("Error during grouping data insertion:", error.message);
+    console.error(error.stack);
+  }
+};
 
 // Function to group transaction based on remove duplicated and add send and rec both in one transaction
 const GropingTransaction = async function () {
@@ -458,20 +534,40 @@ const GropingTransaction = async function () {
     // Helper function to generate bulk operations
     const createBulkOperations = (data, uniqueFields) =>
       data.map((dataItem) => {
-        const { _id, transaction_usd_value, senderName, sender, receiver, receiverName, platform, transaction_type, ...rest } = dataItem;
-    
-        const { senderName: updatedSenderName, receiverName: updatedReceiverName } =
-          userNameDetailsAdd(platform, sender, receiver, senderName, receiverName, transaction_type);
-    
+        const {
+          _id,
+          transaction_usd_value,
+          senderName,
+          sender,
+          receiver,
+          receiverName,
+          platform,
+          transaction_type,
+          ...rest
+        } = dataItem;
+
+        const {
+          senderName: updatedSenderName,
+          receiverName: updatedReceiverName,
+        } = userNameDetailsAdd(
+          platform,
+          sender,
+          receiver,
+          senderName,
+          receiverName,
+          transaction_type
+        );
+
         const uniqueFilter = uniqueFields.reduce((filter, field) => {
           if (rest[field] !== undefined) {
             filter[field] = rest[field];
-          } else if (field in dataItem) { // Check if the field exists outside `rest`
+          } else if (field in dataItem) {
+            // Check if the field exists outside `rest`
             filter[field] = dataItem[field];
           }
           return filter;
         }, {});
-    
+
         return {
           updateOne: {
             filter: uniqueFilter,
@@ -491,14 +587,13 @@ const GropingTransaction = async function () {
           },
         };
       });
-    
+
     // Prepare bulk operations
     const bulkOperations = [
-      ...createBulkOperations(sendRecTrans, ["transaction_number","platform"]),
-      ...createBulkOperations(otherTrans, ["transaction_id","platform"]),
+      ...createBulkOperations(sendRecTrans, ["transaction_number", "platform"]),
+      ...createBulkOperations(otherTrans, ["transaction_id", "platform"]),
       ...createBulkOperations(rewardsTrans, ["transaction_id", "platform"]), // Example with multiple unique fields
     ];
-    
 
     if (!bulkOperations.length) {
       console.log("No bulk operations to perform.");
@@ -525,10 +620,11 @@ const GropingTransaction = async function () {
 };
 
 (async () => {
-  // await DataMigration_Network_refund();
-  // await DataMigration_Transaction_Id();
-  // await AddReceiverAddress();
-  // await AddSenderAddress();
+  await DataMigration_Network_refund();
+  await DataMigration_Transaction_Id();
+  await AddReceiverAddress();
+  await AddSenderAddress();
   await AddSenderReceiverDetails();
+  await BinaceUserMappingFunc();
   await GropingTransaction();
 })();

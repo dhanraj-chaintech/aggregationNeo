@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Enhanced Network Graph</title>
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
+    ></script>
+    <style type="text/css">
+      body {
+        font-family: "Arial", sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f9f9f9;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+
+      #mynetwork {
+        width: 90%;
+        height: 600px;
+        border: 2px solid #ccc;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background: linear-gradient(to bottom, #e0f7fa, #ffffff);
+        margin-bottom: 20px;
+      }
+
+      #details {
+        width: 90%;
+        max-width: 800px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background-color: #ffffff;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        display: none;
+      }
+
+      h3 {
+        font-size: 1.4em;
+        color: #00796b;
+        margin-bottom: 10px;
+      }
+
+      pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-size: 1em;
+        line-height: 1.6em;
+      }
+
+      .highlight {
+        color: #004d40;
+        font-weight: bold;
+      }
+
+      .input-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .input-group input {
+        padding: 5px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        font-size: 14px;
+        width: 200px;
+      }
+
+      .input-group button {
+        padding: 8px 15px;
+        background-color: #0288d1;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .input-group button:hover {
+        background-color: #0277bd;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="display:flex; justify-content: center;gap: 50px; align-items: center;">
+      <div><a href="/">Home</a></div>
+      <div><a href="/shortPath.html">ShortestPath</a></div>
+    </div>
+    <!-- Input Fields for Filters -->
+    <div class="input-group">
+      start_date:<input type="date" id="startDate" placeholder="Start Date" />
+      end_date:<input type="date" id="endDate" placeholder="End Date" />
+      <input type="text" id="senderID" placeholder="Sender ID" />
+      <input type="text" id="senderName" placeholder="Sender Name" />
+      <input type="text" id="platform" placeholder="Platform" />
+      <input type="text" id="receiverId" placeholder="Receiver ID" />
+      <input type="text" id="receiverName" placeholder="Receiver Name" />
+      <input type="text" id="coinCode" placeholder="Coin Code" />
+      <input type="number" id="limit" value="20" placeholder="Limit" />
+      <button onclick="applyFilters()">Apply Filters</button>
+    </div>
+
+    <div id="mynetwork"></div>
+    <div id="details">
+      <h3>Details</h3>
+      <pre id="detailsContent"></pre>
+    </div>
+
+    <script type="text/javascript">
+      async function fetchGraphData(filters = {}) {
+        // Building query string from filters
+        const url = `http://192.168.29.154:3000/filtered-data`;
+
+        try {
+          let response = await fetch(url, {
+    method: "POST", // Change to POST method
+    headers: {
+      "Content-Type": "application/json", // Specify content type as JSON
+    },
+    body: JSON.stringify(filters), // Send filters in the request body
+  });
+
+          if (!response.ok) {
+            console.error("HTTP Error:", response.statusText);
+            return;
+          }
+
+          let jsonResponse = await response.json();
+          console.log("Neo4j Response:", jsonResponse);
+
+          if (!jsonResponse.data) {
+            console.error("Unexpected response format:", jsonResponse);
+            return;
+          }
+
+          let graphData = jsonResponse.data;
+
+          let nodes = new vis.DataSet();
+          let edges = new vis.DataSet();
+
+          graphData.forEach((data) => {
+            let graph = data.graph;
+
+            // Add nodes
+            graph.nodes.forEach((node) => {
+              if (!nodes.get(node.id)) {
+                nodes.add({
+                  id: node.id,
+                  label: node.properties.username || node.labels[0],
+                  userId: node.properties.userId,
+                  email: node.properties.email || "Not Available",
+                  username: node.properties.username || "Not Available",
+                  color: node.properties.userId ? "#0288d1" : "#388e3c",
+                  font: { color: " #77773c" },
+                  size: 30,
+                });
+              }
+            });
+
+            // Width property
+            const MIN_WIDTH = 1; // Smallest edge width
+            const MAX_WIDTH = 5; // Largest edge width
+
+            // Scaling function to map transaction count to width
+            function scaleWidth(transactionCount, min = MIN_WIDTH, max = MAX_WIDTH) {
+              const MIN_COUNT = 1; // Minimum possible transaction count
+              const MAX_COUNT = 100; // Maximum transaction count to consider
+              const clampedCount = Math.max(MIN_COUNT, Math.min(transactionCount, MAX_COUNT)); // Clamp values
+              return ((clampedCount - MIN_COUNT) / (MAX_COUNT - MIN_COUNT)) * (max - min) + min; // Multiply the result by 2
+            }
+
+            // Add edges
+            graph.relationships.forEach((relationship) => {
+              const transactionCount = relationship.properties.transaction_count || 0;
+
+              // Determine the width dynamically based on transaction count
+              const edgeWidth = scaleWidth(transactionCount);
+
+              edges.add({
+                id: relationship.id,
+                from: relationship.startNode,
+                to: relationship.endNode,
+                label: relationship.type,
+                arrows: { to: { enabled: true, scaleFactor: 1.5 } }, // Slightly larger arrowheads
+                color: {
+                  color: "#75ab75",
+                  highlight: "linear-gradient(to right, #ff5722, #ff9800)", // Gradient for hover
+                  hover: "#ff9800",
+                },
+                // dashes: [10, 10], // Dashed line style
+                font: {
+                  align: "horizontal",
+                  size: 10, // Larger text size for clarity
+                  color: "#333", // Neutral text color
+                  bold: true, // Bold text
+                },
+                smooth: {
+                  enabled: true, // Smooth curved edges
+                  type: "cubicBezier", // Smooth bezier curves
+                  roundness: 0.5, // Adjust the curvature
+                },
+                shadow: {
+                  enabled: true,
+                  color: "rgba(0, 0, 0, 0.3)", // Subtle shadow
+                  size: 10,
+                  x: 5,
+                  y: 5,
+                },
+                width: edgeWidth, // Dynamically scaled width
+                title: `
+                  \nTransaction Count: ${transactionCount}
+                  \nSender: ${relationship.properties.senderName || "Unknown"}
+                  \nReceiver: ${relationship.properties.receiverName || "Unknown"}
+                  \nPlatform: ${relationship.properties.platform || "Not Available"}
+                  \nTotal Amount: ${relationship.properties.total_amount || 0}
+                `, // Tooltip with rich content
+                transaction_count: transactionCount,
+                total_amount: relationship.properties.total_amount,
+                transactions: relationship.properties.transactions || [],
+                senderName: relationship.properties.senderName || "Unknown",
+                senderEmail: relationship.properties.senderEmail || "Unknown Email",
+                receiverName: relationship.properties.receiverName || "Unknown",
+                receiverEmail: relationship.properties.receiverEmail || "Unknown Email",
+                platform: relationship.properties.platform || "Not Available",
+                source_address: relationship.properties.source_address || "Not Available",
+                destination_address: relationship.properties.destination_address || "Not Available",
+              });
+            });
+          });
+
+          // Create network visualization
+          var container = document.getElementById("mynetwork");
+          var data = { nodes: nodes, edges: edges };
+          var options = {
+            nodes: {
+              shape: "dot",
+              size: 20,
+              font: { size: 16, color: "#343434" },
+              borderWidth: 2,
+              scaling: { min: 20, max: 40 },
+            },
+            edges: {
+              width: 2,
+              smooth: { type: "continuous", roundness: 0.5 },
+            },
+            interaction: { hover: true, dragNodes: true, zoomView: true },
+            physics: {
+              enabled: true,
+              solver: 'repulsion',
+              forceAtlas2Based: {
+                gravitationalConstant: -50,
+                centralGravity: 0.01,
+                springLength: 200,
+                springConstant: 0.08,
+              },
+              stabilization: {
+                iterations: 200,
+                updateInterval: 50,
+              },
+              maxVelocity: 50,
+              minVelocity: 0.1,
+              adaptiveTimestep: true,
+            },
+          };
+
+          var network = new vis.Network(container, data, options);
+
+          network.on("stabilizationIterationsDone", function () {
+            network.setOptions({ physics: false });
+          });
+
+          // Handle node and edge clicks
+          network.on("click", function (params) {
+            let detailsDiv = document.getElementById("details");
+            let detailsContent = document.getElementById("detailsContent");
+
+            if (params.nodes.length > 0) {
+              let nodeId = params.nodes[0];
+              let nodeData = nodes.get(nodeId);
+              console.log("Node Data:", nodeData);
+              detailsDiv.style.display = "block";
+              detailsContent.innerHTML = `
+                <p><strong class="highlight">Node ID:</strong> ${nodeData.id}</p>
+                <p><strong class="highlight">Label:</strong> ${nodeData.label}</p>
+                <p><strong class="highlight">User Id:</strong> ${nodeData.userId}</p>
+                <p><strong class="highlight">Username:</strong> ${nodeData.username}</p>
+                <p><strong class="highlight">Email:</strong> ${nodeData.email}</p>
+              `;
+            } else if (params.edges.length > 0) {
+              let edgeId = params.edges[0];
+              let edgeData = edges.get(edgeId);
+              console.log("Edge Data:", edgeData);
+              detailsDiv.style.display = "block";
+              detailsContent.innerHTML = `
+                <p><strong class="highlight">Transactions:</strong> ${
+                  JSON.stringify(edgeData.transactions) || "Not Available"
+                }</p>
+                <p><strong class="highlight">Total Amount:</strong> ${
+                  edgeData.total_amount || "Not Available"
+                }</p>
+                <p><strong class="highlight">Transaction Count:</strong> ${
+                  edgeData.transaction_count || "Not Available"
+                }</p>
+                <p><strong class="highlight">Sender:</strong> ${
+                  edgeData.senderName || "Unknown"
+                } (${edgeData.senderEmail})</p>
+                <p><strong class="highlight">Receiver:</strong> ${
+                  edgeData.receiverName || "Unknown"
+                } (${edgeData.receiverEmail})</p>
+                <p><strong class="highlight">Platform:</strong> ${
+                  edgeData.platform || "Not Available"
+                }</p>
+                <p><strong class="highlight">Source Address:</strong> ${
+                  edgeData.source_address || "Not Available"
+                }</p>
+                <p><strong class="highlight">Destination Address:</strong> ${
+                  edgeData.destination_address || "Not Available"
+                }</p>
+              `;
+            } else {
+              detailsDiv.style.display = "none";
+            }
+          });
+        } catch (error) {
+          console.error("Error fetching graph data:", error);
+        }
+      }
+
+      function applyFilters() {
+        // Collect values from input fields
+        const filters = {
+          startDate: document.getElementById("startDate").value || null,
+          senderID: document.getElementById("senderID").value || null,
+          senderName: document.getElementById("senderName").value || null,
+          platform: document.getElementById("platform").value || null,
+          receiverId: document.getElementById("receiverId").value || null,
+          receiverName: document.getElementById("receiverName").value || null,
+          endDate: document.getElementById("endDate").value || null,
+          coinCode: document.getElementById("coinCode").value || null,
+          sortBy: "transaction_count", // Default sorting
+          limit: parseInt(document.getElementById("limit").value) || 20,
+        };
+
+        // Fetch graph data with filters
+        fetchGraphData(filters);
+      }
+
+      // Initial fetch
+      fetchGraphData();
+    </script>
+  </body>
+</html>

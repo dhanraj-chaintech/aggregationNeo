@@ -1,127 +1,3 @@
-// const DuplicationWithDiffTransaction = [
-//   {
-//     $match: {
-//       destination_address: { $ne: null },
-//       source_address: { $ne: null },
-//       status: "completed",
-//     },
-//   },
-//   {
-//     $lookup: {
-//       from: "user_overview_histories",
-//       localField: "_id",
-//       foreignField: "reference_id",
-//       as: "relatedHistories",
-//     },
-//   },
-//   {
-//     $match: {
-//       $expr: {
-//         $ne: ["$destination_address", "$source_address"],
-//       },
-//     },
-//   },
-//   {
-//     $lookup: {
-//       from: "users",
-//       localField: "user_id",
-//       foreignField: "_id",
-//       as: "user",
-//     },
-//   },
-//   {
-//     $group: {
-//       _id: {
-//         user_id: "$user_id",
-//         source_address: "$source_address",
-//         destination_address: "$destination_address",
-//       },
-//       count: { $sum: 1 },
-//       user: {
-//         $push: { $arrayElemAt: ["$user", 0] },
-//       },
-//       transactions: {
-//         $push: {
-//           transaction_id: "$transaction_id",
-//           transaction_amount: "$transaction_amount",
-//           transaction_usd_value: "$transaction_usd_value",
-//           transaction_type: "$transaction_type",
-//           coin_code: "$coin_code",
-//           created_at: "$created_at",
-//           systemTags: "$relatedHistories.system_tags",
-//           fund_source: "$fund_source",
-//         },
-//       },
-//       totalAmount: { $sum: "$transaction_amount" },
-//     },
-//   },
-//   {
-//     $project: {
-//       _id: 0,
-//       user_id: "$_id.user_id",
-//       source_address: "$_id.source_address",
-//       destination_address: "$_id.destination_address",
-//       transactions: 1,
-//       totalAmount: 1,
-//       count: 1,
-//       transaction_type: {
-//         $arrayElemAt: ["$transactions.transaction_type", 0],
-//       },
-//       coin_code: {
-//         $arrayElemAt: ["$transactions.coin_code", 0],
-//       },
-//       userEmail: {
-//         $arrayElemAt: ["$user.email", 0],
-//       },
-//       userName: {
-//         $arrayElemAt: ["$user.username", 0],
-//       },
-//     },
-//   },
-// ];
-
-// const DsNotNull = [
-//   {
-//     $match: {
-//       destination_address: { $ne: null },
-//       source_address: { $ne: null },
-//     },
-//   },
-//   {
-//     $lookup: {
-//       from: "user_overview_histories",
-//       localField: "_id", // Field in the current collection
-//       foreignField: "reference_id", // Field in the user_overview_histories collection
-//       as: "relatedHistories",
-//     },
-//   },
-//   {
-//     $project: {
-//       _id: 1,
-//       transaction_id: 1,
-//       coin_code: 1,
-//       user_id: 1,
-//       fund_source: 1,
-//       transaction_type: 1,
-//       transaction_amount: 1,
-//       transaction_usd_value: 1,
-//       transaction_type: 1,
-//       destination_address: 1,
-//       source_address: 1,
-//       created_at: 1,
-//       systemTags: { $arrayElemAt: ["$relatedHistories.system_tags", 0] }, // Projecting system_tags as a single array
-//     },
-//   },
-// ];
-
-const destinationNotNull = [
-  {
-    $match: {
-      destination_address: { $ne: null },
-    },
-  },
-];
-
 const IXFI_NETWORK_REFUND = [
   {
     $match: {
@@ -149,14 +25,6 @@ const IXFI_NETWORK_REFUND = [
       localField: "_id", // Field in the current collection
       foreignField: "reference_id", // Field in the user_overview_histories collection
       as: "relatedHistories",
-    },
-  },
-  {
-    $lookup: {
-      from: "users", // Collection name should be in quotes
-      localField: "user_id", // Field in the current collection
-      foreignField: "_id", // Field in the users collection
-      as: "users",
     },
   },
   {
@@ -220,9 +88,6 @@ const IXFI_NETWORK_REFUND = [
       cardex_fee: 1,
       updated_at: 1,
       __v: 1,
-
-      username: { $arrayElemAt: ["$users.username", 0] },
-      email: { $arrayElemAt: ["$users.email", 0] },
 
       systemTags: {
         $ifNull: [{ $arrayElemAt: ["$relatedHistories.system_tags", 0] }, []], // Return empty array if system_tags is null
@@ -364,14 +229,6 @@ const IXFIFILTER_REWARDS_AND_TYPE_INTERNAL_INTERNAL_TRANSAFRESPACE_NOTIN_WITH_TR
       },
     },
     {
-      $lookup: {
-        from: "users", // Collection name should be in quotes
-        localField: "user_id", // Field in the current collection
-        foreignField: "_id", // Field in the users collection
-        as: "users",
-      },
-    },
-    {
       $match: {
         $or: [
           {
@@ -438,8 +295,6 @@ const IXFIFILTER_REWARDS_AND_TYPE_INTERNAL_INTERNAL_TRANSAFRESPACE_NOTIN_WITH_TR
         updated_at: 1,
         __v: 1,
         transaction_number: 1,
-        username: { $arrayElemAt: ["$users.username", 0] },
-        email: { $arrayElemAt: ["$users.email", 0] },
 
         systemTags: {
           $ifNull: [{ $arrayElemAt: ["$relatedHistories.system_tags", 0] }, []], // Return empty array if system_tags is null
@@ -683,17 +538,11 @@ const groupBasedOnRewardsRemoveDuplicate = [
       fund_source: {
         $first: "$fund_source",
       },
-      status: {
-        $first: "$status",
-      },
       systemTags: {
         $first: "$systemTags",
       },
       transaction_id: {
         $first: "$transaction_id",
-      },
-      internal_status: {
-        $first: "$internal_status",
       },
       transaction_usd_value: {
         $first: "$transaction_usd_value",
@@ -704,7 +553,7 @@ const groupBasedOnRewardsRemoveDuplicate = [
       receiverEmail: { $first: "$receiverEmail" },
       source_address: { $first: "$source_address" },
       destination_address: { $first: "$destination_address" },
-      platform:{ $first: "$platform" },
+      platform: { $first: "$platform" },
       transaction_amount: {
         $first: "$transaction_amount",
       },
@@ -743,17 +592,11 @@ const groupOtherTransactionType = [
       fund_source: {
         $first: "$fund_source",
       },
-      status: {
-        $first: "$status",
-      },
       systemTags: {
         $first: "$systemTags",
       },
       transaction_id: {
         $first: "$transaction_id",
-      },
-      internal_status: {
-        $first: "$internal_status",
       },
       transaction_usd_value: {
         $first: "$transaction_usd_value",
@@ -777,147 +620,32 @@ const groupOtherTransactionType = [
     },
   },
 ];
-const groupTransactionFrequency = [
+
+const BinanceUserMapping = [
   {
-    $group: {
-      _id: {
-        sender: "$sender",
-        receiver: "$receiver",
-        coin_code: "$coin_code",
-        year: {
-          $year: "$created_at",
-        },
-        month: {
-          $month: "$created_at",
-        },
-      },
-      total_amount: {
-        $sum: "$transaction_amount",
-      },
-      transactions: {
-        $push: "$$ROOT",
-      },
-      transaction_count: {
-        $sum: 1,
-      },
-    },
+    $match: {
+      platform: "BINANCE",
+      transaction_type:"send",
+    }
   },
- 
+  {
+    $lookup: {
+      from: "wallet_history_kyt", 
+      localField: "destination_address", 
+      foreignField: "source_address", 
+      as: "result" 
+    }
+  },
   {
     $project: {
-      _id: 0,
-      sender: "$_id.sender",
-      receiver: "$_id.receiver",
-      coin_code: "$_id.coin_code",
-      year: "$_id.year",
-      month: "$_id.month",
-      total_amount: 1,
-transaction_count:1,
-      transactions: {
-        $map: {
-          input: "$transactions",
-          as: "transaction",
-          in: {
-            transaction_amount: "$$transaction.transaction_amount",
-            transaction_id: "$$transaction.transaction_id",
-            created_at: "$$transaction.created_at",
-            fundsource: "$$transaction.fundsource",
-            internal_status: "$$transaction.internal_status",
-            transaction_number: "$$transaction.transaction_number",
-            transaction_usd_value: "$$transaction.transaction_usd_value",
-            transaction_type: "$$transaction.transaction_type",
-            systemTags: "$$transaction.systemTags",
-          },
-        },
-      },
-      transaction_count: 1,
-      senderEmail: {
-        $arrayElemAt: ["$transactions.senderEmail", 0],
-      },
-      receiverEmail: {
-        $arrayElemAt: ["$transactions.receiverEmail", 0],
-      },
-      senderName: {
-        $arrayElemAt: ["$transactions.senderName", 0],
-      },
-      receiverName: {
-        $arrayElemAt: ["$transactions.receiverName", 0],
-      },
-      transaction_type: {
-        $arrayElemAt: ["$transactions.transaction_type", 0],
-      },
-    },
-  },
+      source_address: 1,
+      destination_address: 1,
+      platform: 1,
+      result: 1
+    }
+  }
 ];
-const groupTransactionFrequencyYear = [
-  {
-    $group: {
-      _id: {
-        sender: "$sender",
-        receiver: "$receiver",
-        coin_code: "$coin_code",
-        year: {
-          $year: "$created_at",
-        },
-      },
-      total_amount: {
-        $sum: "$transaction_amount",
-      },
-      transactions: {
-        $push: "$$ROOT",
-      },
-      transaction_count: {
-        $sum: 1,
-      },
-    },
-  },
- 
-  {
-    $project: {
-      _id: 0,
-      sender: "$_id.sender",
-      filter:'year',
-      receiver: "$_id.receiver",
-      coin_code: "$_id.coin_code",
-      year: "$_id.year",
-      total_amount: 1,
-      transaction_count:1,
-      transactions: {
-        $map: {
-          input: "$transactions",
-          as: "transaction",
-          in: {
-            transaction_amount: "$$transaction.transaction_amount",
-            transaction_id: "$$transaction.transaction_id",
-            created_at: "$$transaction.created_at",
-            fundsource: "$$transaction.fundsource",
-            internal_status: "$$transaction.internal_status",
-            transaction_number: "$$transaction.transaction_number",
-            transaction_usd_value: "$$transaction.transaction_usd_value",
-            transaction_type: "$$transaction.transaction_type",
-            systemTags: "$$transaction.systemTags",
-          },
-        },
-      },
-      transaction_count: 1,
-      senderEmail: {
-        $arrayElemAt: ["$transactions.senderEmail", 0],
-      },
-      receiverEmail: {
-        $arrayElemAt: ["$transactions.receiverEmail", 0],
-      },
-      senderName: {
-        $arrayElemAt: ["$transactions.senderName", 0],
-      },
-      receiverName: {
-        $arrayElemAt: ["$transactions.receiverName", 0],
-      },
-      transaction_type: {
-        $arrayElemAt: ["$transactions.transaction_type", 0],
-      },
-    },
-  },
-];
+
 module.exports = {
   IXFI_NETWORK_REFUND,
   IXFIFILTER_REWARDS_AND_TYPE_INTERNAL_INTERNAL_TRANSAFRESPACE_NOTIN_WITH_TRANSACTION_NUM,
@@ -928,6 +656,5 @@ module.exports = {
   groupBasedOnTranSendAndRec,
   groupBasedOnRewardsRemoveDuplicate,
   groupOtherTransactionType,
-  groupTransactionFrequency,
-  groupTransactionFrequencyYear 
+  BinanceUserMapping,
 };
