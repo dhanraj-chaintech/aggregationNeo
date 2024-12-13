@@ -629,14 +629,6 @@ const BinanceUserMapping = [
     }
   },
   {
-    $lookup: {
-      from: "wallet_history_kyt", 
-      localField: "destination_address", 
-      foreignField: "source_address", 
-      as: "result" 
-    }
-  },
-  {
     $project: {
       source_address: 1,
       destination_address: 1,

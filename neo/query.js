@@ -39,11 +39,21 @@ const filteredQueryData = async (data) => {
 
     // Dynamically build filtering conditions for transactions (date and coinCode)
     const conditions = [];
-    if (startDate && endDate) {
-      conditions.push(
-        `date(txn.date) >= date('${startDate}') AND date(txn.date) <= date('${endDate}')`
-      );
+    if (startDate || endDate) {
+      const dateConditions = [];
+      
+      if (startDate) {
+        dateConditions.push(`date(txn.date) >= date('${startDate}')`);
+      }
+      
+      if (endDate) {
+        dateConditions.push(`date(txn.date) <= date('${endDate}')`);
+      }
+    
+      // Join date conditions with "AND"
+      conditions.push(dateConditions.join(' AND '));
     }
+    
     if (coinCode) {
       conditions.push(`txn.coin_code = '${coinCode}'`);
     }

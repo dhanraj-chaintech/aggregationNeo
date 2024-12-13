@@ -454,7 +454,6 @@ const BinaceUserMappingFunc = async function () {
 
     const bulkOperations = data
       .map((dataItem) => {
-        if (dataItem.result.length === 0)
           return {
             updateOne: {
               filter: { _id: dataItem._id },
@@ -466,21 +465,6 @@ const BinaceUserMappingFunc = async function () {
               upsert: true,
             },
           };
-        const receiverItem = dataItem.result[0];
-        return {
-          updateOne: {
-            filter: { _id: dataItem._id },
-            update: {
-              $set: {
-                receiver: receiverItem.sender,
-                receiverName: receiverItem.senderName,
-                receiverEmail: receiverItem.senderEmail,
-                platform: "IXFI",
-              },
-            },
-            upsert: true,
-          },
-        };
       })
       .filter((operation) => operation !== null); // Remove null entries
 
@@ -590,7 +574,7 @@ const GropingTransaction = async function () {
 
     // Prepare bulk operations
     const bulkOperations = [
-      ...createBulkOperations(sendRecTrans, ["transaction_number", "platform"]),
+      ...createBulkOperations(sendRecTrans, ["transaction_number", "platform","sender"]),
       ...createBulkOperations(otherTrans, ["transaction_id", "platform"]),
       ...createBulkOperations(rewardsTrans, ["transaction_id", "platform"]), // Example with multiple unique fields
     ];
@@ -620,11 +604,11 @@ const GropingTransaction = async function () {
 };
 
 (async () => {
-  await DataMigration_Network_refund();
-  await DataMigration_Transaction_Id();
-  await AddReceiverAddress();
-  await AddSenderAddress();
-  await AddSenderReceiverDetails();
+  // await DataMigration_Network_refund();
+  // await DataMigration_Transaction_Id();
+  // await AddReceiverAddress();
+  // await AddSenderAddress();
+  // await AddSenderReceiverDetails();
   await BinaceUserMappingFunc();
   await GropingTransaction();
 })();
