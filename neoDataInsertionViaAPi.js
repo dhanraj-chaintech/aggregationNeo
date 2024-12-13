@@ -36,9 +36,7 @@ SET t.transaction_type = $transactionType,
     t.receiver = $receiver,
     t.receiverName = $receiverName,
     t.receiverEmail = $receiverEmail,
-    t.platform = $platform,
-    t.source_address = $source_address,
-    t.destination_address = $destination_address
+    t.platform = $platform
 
 WITH t, s, r, 
      [transaction IN t.transactions | apoc.convert.fromJsonMap(transaction)] AS transactions
@@ -82,8 +80,6 @@ RETURN t.transaction_count, t.total_amount, t.transactions
           receiverEmail: row.receiverEmail,
           transactionType: row.transaction_type,
           platform: row.platform,
-          source_address: row.source_address,
-          destination_address: row.destination_address,
           transactionDate: row.created_at.toISOString().split("T")[0],
           tnxId: row._id.toString(),
           transactionTime: row.created_at
@@ -101,7 +97,7 @@ RETURN t.transaction_count, t.total_amount, t.transactions
     const response = await insertData({ statements });
     const result = await response;
 
-    if (result.errors && result.errors.length > 0) {
+    if (result?.errors && result.errors.length > 0) {
       console.error("Errors:", result.errors);
     } else {
       console.log(

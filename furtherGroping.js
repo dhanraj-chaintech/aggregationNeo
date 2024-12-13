@@ -24,12 +24,10 @@ async function bulkInsertData() {
         receiverEmail: row.receiverEmail,
         transactionType: row.transaction_type,
         platform: row.platform,
-        source_address: row.source_address,
-        destination_address: row.destination_address,
         coinCode: row.coin_code,
         date: row.created_at.toISOString().split("T")[0],
         time: row.created_at.toISOString().split("T")[1].split(".")[0],
-        tnxId: row.tnxId
+        tnxId: row._id.toString()
       };
     });
 
@@ -48,6 +46,14 @@ async function bulkInsertData() {
         t.transactions = [],
         t.total_amount = 0,
         t.transaction_count = 0
+    SET  t.transaction_type = row.transactionType,
+    t.sender = row.sender,
+    t.senderName = row.senderName,
+    t.senderEmail = row.senderEmail,
+    t.receiver = row.receiver,
+    t.receiverName = row.receiverName,
+    t.receiverEmail = row.receiverEmail,
+    t.platform = row.platform
     
     WITH t, row, 
          [txn IN t.transactions | apoc.convert.fromJsonMap(txn)] AS transactions

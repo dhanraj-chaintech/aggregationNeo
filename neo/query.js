@@ -16,10 +16,10 @@ const filteredQueryData = async (data) => {
 
   try {
     const conditioNode = [];
-    if (senderID) conditioNode.push(`s.userId = ${senderID}`);
+    if (senderID) conditioNode.push(`s.userId = '${senderID}'`);
     if (senderName) conditioNode.push(`s.username = '${senderName}'`);
     if (receiverName) conditioNode.push(`r.username = '${receiverName}'`);
-    if (receiverId) conditioNode.push(`r.userId = ${receiverId}`); // Corrected to receiver's userId
+    if (receiverId) conditioNode.push(`r.userId = '${receiverId}'`); // Corrected to receiver's userId
     if (platform) conditioNode.push(`t.platform = '${platform}'`);
 
     // Build query conditionally based on filters

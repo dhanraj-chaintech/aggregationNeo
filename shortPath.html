@@ -245,8 +245,6 @@
                 receiverName: relationship.properties.receiverName || "Unknown",
                 receiverEmail: relationship.properties.receiverEmail || "Unknown Email",
                 platform: relationship.properties.platform || "Not Available",
-                source_address: relationship.properties.source_address || "Not Available",
-                destination_address: relationship.properties.destination_address || "Not Available",
               });
               } else {
                 console.log(`Edge with id ${relationship.id} already exists.`);
@@ -317,9 +315,7 @@
               console.log("Edge Data:", edgeData);
               detailsDiv.style.display = "block";
               detailsContent.innerHTML = `
-                <p><strong class="highlight">Transactions:</strong> ${
-                  JSON.stringify(edgeData.transactions) || "Not Available"
-                }</p>
+                
                 <p><strong class="highlight">Total Amount:</strong> ${
                   edgeData.total_amount || "Not Available"
                 }</p>
@@ -335,11 +331,8 @@
                 <p><strong class="highlight">Platform:</strong> ${
                   edgeData.platform || "Not Available"
                 }</p>
-                <p><strong class="highlight">Source Address:</strong> ${
-                  edgeData.source_address || "Not Available"
-                }</p>
-                <p><strong class="highlight">Destination Address:</strong> ${
-                  edgeData.destination_address || "Not Available"
+                <p><strong class="highlight">Transactions:</strong> ${
+                  JSON.stringify(edgeData.transactions) || "Not Available"
                 }</p>
               `;
             } else {

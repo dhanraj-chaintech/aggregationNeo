@@ -1,6 +1,6 @@
 async function fetchGraphData(cypherString) {
   try {
-    let response = await fetch("http://localhost:7474/db/neo4j/tx", {
+    let response = await fetch("http://localhost:7475/db/neo4j/tx", {
       method: "POST",
       headers: {
         Authorization: "Basic " + btoa("neo4j:root@123"),
@@ -28,7 +28,7 @@ async function fetchGraphData(cypherString) {
 }
 async function insertData(data) {
   try {
-    let response = await fetch("http://localhost:7474/db/neo4j/tx/commit", {
+    let response = await fetch("http://localhost:7475/db/neo4j/tx/commit", {
       method: "POST",
       headers: {
         Authorization: "Basic " + btoa("neo4j:root@123"),
