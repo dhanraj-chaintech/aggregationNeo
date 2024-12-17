@@ -227,3 +227,34 @@ LIMIT 10
 ;
 
 ```
+# This For Find path between two nodes
+```javascript
+  MATCH (vStart1:Person {username:""})
+      OPTIONAL MATCH (vStart2:Person {username:""})
+      CALL apoc.path.expandConfig(vStart1, {
+          uniqueness: "NODE_GLOBAL",
+          maxLevel: -1
+      }) YIELD path AS path1
+      WITH path1, vStart2
+      CALL apoc.path.expandConfig(vStart2, {
+          uniqueness: "NODE_GLOBAL",
+          maxLevel: -1
+      }) YIELD path AS path2
+      WITH path1, path2
+      WHERE last(nodes(path1)) = last(nodes(path2))
+      RETURN path1, path2
+      LIMIT 1
+```
+# This For Find Path of single node 
+
+```javascript
+ MATCH (vStart1:Person {username:""})
+      CALL apoc.path.expandConfig(vStart1, {
+          uniqueness: "NODE_GLOBAL",
+          maxLevel: -1
+      }) YIELD path AS path1
+      WITH path1
+      RETURN path1
+      LIMIT 1
+
+ ```

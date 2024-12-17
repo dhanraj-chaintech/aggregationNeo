@@ -178,5 +178,51 @@ const shortestPath = async (data) => {
     throw error;
   }
 };
+const normalView = async (data) => {
+  try {
+    const {
+      user1ID = null,
+      user1Name = null,
+      user2Id = null,
+      user2Name = null,
+      limit = 20,
+    } = data || {};
+    const conditions = [];
 
-module.exports = { filteredQueryData, shortestPath };
+    // Dynamically add the conditions
+    if (user1ID) conditions.push(`n.userId='${user1ID}' OR q.userId='${user1ID}'`);
+    if (user2Id) conditions.push(`n.userId='${user2Id}' OR q.userId='${user2Id}'`);
+    if (user1Name) conditions.push(`n.username='${user1Name}' OR q.username='${user1Name}'`); // Fixed this from userId to userName for user1Name
+    if (user2Name) conditions.push(`n.username='${user2Name}' OR q.username='${user2Name}'`); // Fixed this from userId to userName for user2Name
+
+    // Build the condition string by joining the array elements with 'OR'
+    const cond = conditions.join(" OR ");
+
+    // Construct the final query
+    const query = `
+      MATCH (n:Person)-[r:SEND]-(q:Person)
+      ${conditions.length > 0 ? `WHERE ${cond}` : ''}
+      RETURN n, r LIMIT ${limit}
+    `;
+
+    console.log("Generated Query:", query); // Debugging generated query
+
+    // Fetch graph data using the constructed query
+    const queryResult = await fetchGraphData(query);
+
+    // Validate and return results
+    if (!queryResult || !queryResult.results) {
+      console.error("No results returned from query.");
+      return [];
+    }
+
+    return queryResult.results
+  } catch (error) {
+    console.error("Error executing dynamic filtered query:", error);
+    throw error;
+  }
+};
+
+
+
+module.exports = { filteredQueryData, shortestPath ,normalView};

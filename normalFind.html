@@ -96,9 +96,9 @@
         gap: 50px;
       "
     >
-    <div><a href="/">Home</a></div>
-    <div><a href="/shortPath.html">ShortestPath</a></div>
-    <div><a href="/normalFind.html">Normal View</a></div>
+      <div><a href="/">Home</a></div>
+      <div><a href="/shortPath.html">ShortestPath</a></div>
+      <div><a href="/normalFind.html">Normal View</a></div>
     </div>
 
     <!-- Input Fields for Filters -->
@@ -107,7 +107,7 @@
       <input type="text" id="user1Name" placeholder="user1Name" />
       <input type="text" id="user2Id" placeholder="user2ID" />
       <input type="text" id="user2Name" placeholder="user2Name" />
-      <input type="number" id="limit" value="1" placeholder="Limit" />
+      <input type="number" id="limit" value="20" placeholder="Limit" />
       <button onclick="applyFilters()">Apply Filters</button>
     </div>
 
@@ -119,7 +119,7 @@
 
     <script type="text/javascript">
       async function fetchGraphData(filters = {}) {
-        const url = `http://192.168.29.154:3000/shortestpath-data`;
+        const url = `http://192.168.29.154:3000/normal-view`;
 
         try {
           let response = await fetch(url, {
@@ -163,9 +163,9 @@
             // Add nodes
             graph.nodes.forEach((node) => {
               const colorRandom = getRandomColor();
-                const label = trimLabel(
-                  node.properties.username || node.labels[0]
-                );
+              const label = trimLabel(
+                node.properties.username || node.labels[0]
+              );
               if (!nodes.get(node.id)) {
                 nodes.add({
                   id: node.id,
@@ -204,7 +204,7 @@
             // Add edges
             graph.relationships.forEach((relationship) => {
               console.log(relationship); //relation remove
-              
+
               const transactionCount =
                 relationship.properties.transaction_count || 0;
               const edgeWidth = scaleWidth(transactionCount);
@@ -212,52 +212,59 @@
               // Check if edge with the same id exists
               if (!edges.get(relationship.id)) {
                 edges.add({
-                id: relationship.id,
-                from: relationship.startNode,
-                to: relationship.endNode,
-                label: relationship.type,
-                arrows: { to: { enabled: true, scaleFactor: 1.5 } }, // Slightly larger arrowheads
-                color: {
-                  color: "#75ab75",
-                  highlight: "linear-gradient(to right, #ff5722, #ff9800)", // Gradient for hover
-                  hover: "#ff9800",
-                },
-                // dashes: [10, 10], // Dashed line style
-                font: {
-                  align: "horizontal",
-                  size: 50, // Larger text size for clarity
-                  color: "#333", // Neutral text color
-                  bold: true, // Bold text
-                },
-                smooth: {
-                  enabled: true, // Smooth curved edges
-                  type: "cubicBezier", // Smooth bezier curves
-                  roundness: 0.5, // Adjust the curvature
-                },
-                shadow: {
-                  enabled: true,
-                  color: "rgba(0, 0, 0, 0.3)", // Subtle shadow
-                  size: 10,
-                  x: 5,
-                  y: 5,
-                },
-                width: edgeWidth, // Dynamically scaled width
-                title: `
+                  id: relationship.id,
+                  from: relationship.startNode,
+                  to: relationship.endNode,
+                  label: relationship.type,
+                  arrows: { to: { enabled: true, scaleFactor: 1.5 } }, // Slightly larger arrowheads
+                  color: {
+                    color: "#75ab75",
+                    highlight: "linear-gradient(to right, #ff5722, #ff9800)", // Gradient for hover
+                    hover: "#ff9800",
+                  },
+                  // dashes: [10, 10], // Dashed line style
+                  font: {
+                    align: "horizontal",
+                    size: 10, // Larger text size for clarity
+                    color: "#333", // Neutral text color
+                    bold: true, // Bold text
+                  },
+                  smooth: {
+                    enabled: true, // Smooth curved edges
+                    type: "cubicBezier", // Smooth bezier curves
+                    roundness: 0.5, // Adjust the curvature
+                  },
+                  shadow: {
+                    enabled: true,
+                    color: "rgba(0, 0, 0, 0.3)", // Subtle shadow
+                    size: 10,
+                    x: 5,
+                    y: 5,
+                  },
+                  width: edgeWidth, // Dynamically scaled width
+                  title: `
                   \nTransaction Count: ${transactionCount}
                   \nSender: ${relationship.properties.senderName || "Unknown"}
-                  \nReceiver: ${relationship.properties.receiverName || "Unknown"}
-                  \nPlatform: ${relationship.properties.platform || "Not Available"}
+                  \nReceiver: ${
+                    relationship.properties.receiverName || "Unknown"
+                  }
+                  \nPlatform: ${
+                    relationship.properties.platform || "Not Available"
+                  }
                   \nTotal Amount: ${relationship.properties.total_amount || 0}
                 `, // Tooltip with rich content
-                transaction_count: transactionCount,
-                total_amount: relationship.properties.total_amount,
-                transactions: relationship.properties.transactions || [],
-                senderName: relationship.properties.senderName || "Unknown",
-                senderEmail: relationship.properties.senderEmail || "Unknown Email",
-                receiverName: relationship.properties.receiverName || "Unknown",
-                receiverEmail: relationship.properties.receiverEmail || "Unknown Email",
-                platform: relationship.properties.platform || "Not Available",
-              });
+                  transaction_count: transactionCount,
+                  total_amount: relationship.properties.total_amount,
+                  transactions: relationship.properties.transactions || [],
+                  senderName: relationship.properties.senderName || "Unknown",
+                  senderEmail:
+                    relationship.properties.senderEmail || "Unknown Email",
+                  receiverName:
+                    relationship.properties.receiverName || "Unknown",
+                  receiverEmail:
+                    relationship.properties.receiverEmail || "Unknown Email",
+                  platform: relationship.properties.platform || "Not Available",
+                });
               } else {
                 console.log(`Edge with id ${relationship.id} already exists.`);
               }
@@ -270,7 +277,7 @@
             nodes: {
               shape: "dot",
               size: 40,
-              font: { size: 20, color: "#343434" },
+              font: { size: 16, color: "#343434" },
               borderWidth: 2,
               scaling: { min: 20, max: 40 },
             },
@@ -314,18 +321,12 @@
               randomSeed: 42, // Random seed for consistent layout
               improvedLayout: true, // Enable improved layout
             },
-
-            groups: {
-              Group1: { color: { background: "#FF6347", border: "#E53E3E" } }, // Group 1 colors
-              Group2: { color: { background: "#32CD32", border: "#28A745" } }, // Group 2 colors
-              Group3: { color: { background: "#4682B4", border: "#1E90FF" } }, // Group 3 colors
-            },
           };
 
           var network = new vis.Network(container, data, options);
 
           network.on("stabilizationIterationsDone", function () {
-            network.setOptions({ physics: true });
+            network.setOptions({ physics: false });
           });
 
           // Handle node and edge clicks
@@ -375,7 +376,35 @@
               detailsDiv.style.display = "none";
             }
           });
-        }  catch (error) {
+          const originalEdgeWidth = {};
+
+          // Handle edge hover event to increase width
+          network.on("hoverEdge", function (params) {
+            const edgeId = params.edge;
+            const edgeData = edges.get(edgeId);
+
+            // Store the original width of the edge when hovered
+            if (!originalEdgeWidth[edgeId]) {
+              originalEdgeWidth[edgeId] = edgeData.width;
+            }
+
+            // Increase edge width on hover
+            edges.update({ id: edgeId, width: 50 }); // Increase width on hover
+          });
+
+          // Handle blur (mouse leave) event to reset the width
+          network.on("blurEdge", function (params) {
+            const edgeId = params.edge;
+
+            // Reset the edge width to its original width
+            if (originalEdgeWidth[edgeId]) {
+              edges.update({ id: edgeId, width: originalEdgeWidth[edgeId] });
+            } else {
+              edges.update({ id: edgeId, width: 2 }); // Default width if no original width was stored
+            }
+          });
+
+        } catch (error) {
           console.error("Error fetching graph data:", error);
         }
       }

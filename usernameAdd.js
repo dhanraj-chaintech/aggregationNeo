@@ -32,7 +32,8 @@ exports.userNameDetailsAdd = function (
   
     // Assign names based on transaction type
     if (transactionType === "send") {
-      receiverName = defaultName || receiverName; // Default name for receiver if sending
+      if(platform==="BINANCE") receiverName = `BINANCE ${receiver}`
+      else receiverName = defaultName || receiverName; // Default name for receiver if sending
     } else if (transactionType === "receive") {
       senderName = defaultName || senderName; // Default name for sender if receiving
     } else if (transactionType === "network_fee_refund") {

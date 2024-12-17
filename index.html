@@ -21,7 +21,7 @@
 
       #mynetwork {
         width: 90%;
-        height: 600px;
+        height: 800px;
         border: 2px solid #ccc;
         border-radius: 8px;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -88,9 +88,17 @@
     </style>
   </head>
   <body>
-    <div style="display:flex; justify-content: center;gap: 50px; align-items: center;">
-      <div><a href="/">Home</a></div>
-      <div><a href="/shortPath.html">ShortestPath</a></div>
+    <div
+      style="
+        display: flex;
+        justify-content: center;
+        gap: 50px;
+        align-items: center;
+      "
+    >
+    <div><a href="/">Home</a></div>
+    <div><a href="/shortPath.html">ShortestPath</a></div>
+    <div><a href="/normalFind.html">Normal View</a></div>
     </div>
     <!-- Input Fields for Filters -->
     <div class="input-group">
@@ -119,12 +127,12 @@
 
         try {
           let response = await fetch(url, {
-    method: "POST", // Change to POST method
-    headers: {
-      "Content-Type": "application/json", // Specify content type as JSON
-    },
-    body: JSON.stringify(filters), // Send filters in the request body
-  });
+            method: "POST", // Change to POST method
+            headers: {
+              "Content-Type": "application/json", // Specify content type as JSON
+            },
+            body: JSON.stringify(filters), // Send filters in the request body
+          });
 
           if (!response.ok) {
             console.error("HTTP Error:", response.statusText);
@@ -143,41 +151,65 @@
 
           let nodes = new vis.DataSet();
           let edges = new vis.DataSet();
-
+          // Helper function to generate random colors
+          function getRandomColor() {
+            return `#${Math.floor(Math.random() * 16777215).toString(16)}`;
+          }
+          function trimLabel(label, maxLength = 10) {
+            return label.length > maxLength
+              ? label.substring(0, maxLength) + "..."
+              : label;
+          }
           graphData.forEach((data) => {
             let graph = data.graph;
 
             // Add nodes
             graph.nodes.forEach((node) => {
               if (!nodes.get(node.id)) {
+                const colorRandom = getRandomColor();
+                const label = trimLabel(
+                  node.properties.username || node.labels[0]
+                );
                 nodes.add({
                   id: node.id,
-                  label: node.properties.username || node.labels[0],
+                  label: label, // Trimmed lab
                   userId: node.properties.userId,
                   email: node.properties.email || "Not Available",
                   username: node.properties.username || "Not Available",
-                  color: node.properties.userId ? "#0288d1" : "#388e3c",
-                  font: { color: " #77773c" },
-                  size: 30,
+                  color: colorRandom,
+                  font: { color: colorRandom, size: 100 },
+                  size: 100,
                 });
               }
             });
 
             // Width property
-            const MIN_WIDTH = 1; // Smallest edge width
-            const MAX_WIDTH = 5; // Largest edge width
+            const MIN_WIDTH = 10; // Smallest edge width
+            const MAX_WIDTH = 20; // Largest edge width
 
             // Scaling function to map transaction count to width
-            function scaleWidth(transactionCount, min = MIN_WIDTH, max = MAX_WIDTH) {
+            function scaleWidth(
+              transactionCount,
+              min = MIN_WIDTH,
+              max = MAX_WIDTH
+            ) {
               const MIN_COUNT = 1; // Minimum possible transaction count
               const MAX_COUNT = 100; // Maximum transaction count to consider
-              const clampedCount = Math.max(MIN_COUNT, Math.min(transactionCount, MAX_COUNT)); // Clamp values
-              return ((clampedCount - MIN_COUNT) / (MAX_COUNT - MIN_COUNT)) * (max - min) + min; // Multiply the result by 2
+              const clampedCount = Math.max(
+                MIN_COUNT,
+                Math.min(transactionCount, MAX_COUNT)
+              ); // Clamp values
+              return (
+                ((clampedCount - MIN_COUNT) / (MAX_COUNT - MIN_COUNT)) *
+                  (max - min) +
+                min
+              ); // Multiply the result by 2
             }
 
             // Add edges
             graph.relationships.forEach((relationship) => {
-              const transactionCount = relationship.properties.transaction_count || 0;
+              const transactionCount =
+                relationship.properties.transaction_count || 0;
 
               // Determine the width dynamically based on transaction count
               const edgeWidth = scaleWidth(transactionCount);
@@ -216,17 +248,23 @@
                 title: `
                   \nTransaction Count: ${transactionCount}
                   \nSender: ${relationship.properties.senderName || "Unknown"}
-                  \nReceiver: ${relationship.properties.receiverName || "Unknown"}
-                  \nPlatform: ${relationship.properties.platform || "Not Available"}
+                  \nReceiver: ${
+                    relationship.properties.receiverName || "Unknown"
+                  }
+                  \nPlatform: ${
+                    relationship.properties.platform || "Not Available"
+                  }
                   \nTotal Amount: ${relationship.properties.total_amount || 0}
                 `, // Tooltip with rich content
                 transaction_count: transactionCount,
                 total_amount: relationship.properties.total_amount,
                 transactions: relationship.properties.transactions || [],
                 senderName: relationship.properties.senderName || "Unknown",
-                senderEmail: relationship.properties.senderEmail || "Unknown Email",
+                senderEmail:
+                  relationship.properties.senderEmail || "Unknown Email",
                 receiverName: relationship.properties.receiverName || "Unknown",
-                receiverEmail: relationship.properties.receiverEmail || "Unknown Email",
+                receiverEmail:
+                  relationship.properties.receiverEmail || "Unknown Email",
                 platform: relationship.properties.platform || "Not Available",
               });
             });
@@ -238,7 +276,7 @@
           var options = {
             nodes: {
               shape: "dot",
-              size: 20,
+              size: 40,
               font: { size: 16, color: "#343434" },
               borderWidth: 2,
               scaling: { min: 20, max: 40 },
@@ -249,21 +287,45 @@
             },
             interaction: { hover: true, dragNodes: true, zoomView: true },
             physics: {
-              enabled: true,
-              solver: 'repulsion',
+              enabled: true, // Enable physics simulation
+              solver: "forceAtlas2Based", // Physics solver type
               forceAtlas2Based: {
-                gravitationalConstant: -50,
-                centralGravity: 0.01,
-                springLength: 200,
-                springConstant: 0.08,
+                gravitationalConstant: -3000, // Gravitational force
+                centralGravity: 0.01, // Central gravity
+                springLength: 500, // Spring length
+                springConstant: 0.08, // Spring constant
+                avoidOverlap: 1, // Avoid node overlap
               },
               stabilization: {
-                iterations: 200,
-                updateInterval: 50,
+                enabled: true, // Enable stabilization
+                iterations: 300, // Number of iterations for stabilization
+                updateInterval: 10, // Update interval for stabilization
               },
-              maxVelocity: 50,
-              minVelocity: 0.1,
-              adaptiveTimestep: true,
+              maxVelocity: 50, // Max velocity for physics simulation
+              minVelocity: 0.1, // Min velocity for physics simulation
+              adaptiveTimestep: true, // Adaptive timestep for physics
+            },
+
+            layout: {
+              hierarchical: {
+                enabled: false, // Switch to true for hierarchical layout
+                levelSeparation: 120, // Space between levels
+                nodeSpacing: 120, // Node spacing
+                treeSpacing: 180, // Tree spacing
+                blockShifting: true, // Enable block shifting
+                edgeMinimization: true, // Minimize edge crossings
+                parentCentralization: true, // Centralize parent nodes
+                direction: "UD", // Direction of hierarchy (UD = Up-Down)
+                sortMethod: "hubsize", // Sort nodes by hub size or directed
+              },
+              randomSeed: 42, // Random seed for consistent layout
+              improvedLayout: true, // Enable improved layout
+            },
+
+            groups: {
+              Group1: { color: { background: "#FF6347", border: "#E53E3E" } }, // Group 1 colors
+              Group2: { color: { background: "#32CD32", border: "#28A745" } }, // Group 2 colors
+              Group3: { color: { background: "#4682B4", border: "#1E90FF" } }, // Group 3 colors
             },
           };
 
@@ -313,13 +375,41 @@
                   edgeData.platform || "Not Available"
                 }</p>
                  <p><strong class="highlight">Transactions:</strong> ${
-                  JSON.stringify(edgeData.transactions) || "Not Available"
-                }</p>
+                   JSON.stringify(edgeData.transactions) || "Not Available"
+                 }</p>
               `;
             } else {
               detailsDiv.style.display = "none";
             }
           });
+          const originalEdgeWidth = {};
+
+// Handle edge hover event to increase width
+network.on("hoverEdge", function (params) {
+  const edgeId = params.edge;
+  const edgeData = edges.get(edgeId);
+
+  // Store the original width of the edge when hovered
+  if (!originalEdgeWidth[edgeId]) {
+    originalEdgeWidth[edgeId] = edgeData.width;
+  }
+
+  // Increase edge width on hover
+  edges.update({ id: edgeId, width: 50 }); // Increase width on hover
+});
+
+// Handle blur (mouse leave) event to reset the width
+network.on("blurEdge", function (params) {
+  const edgeId = params.edge;
+
+  // Reset the edge width to its original width
+  if (originalEdgeWidth[edgeId]) {
+    edges.update({ id: edgeId, width: originalEdgeWidth[edgeId] });
+  } else {
+    edges.update({ id: edgeId, width: 2 }); // Default width if no original width was stored
+  }
+});
+
         } catch (error) {
           console.error("Error fetching graph data:", error);
         }

@@ -347,6 +347,9 @@ const AddSenderAddress = async function () {
             receiverExternalType = "BINANCE";
           if (transaction_number.length > 40)
             receiverExternalType = "SUPER_EXTERNAL";
+          if(receiverExternalType==="BINANCE") {
+            transformedItem.receiverName = `BINANCE ${destination_address}`
+          }
           transformedItem.receiver =
             receiverExternalType === "SUPER_EXTERNAL"
               ? destination_address
@@ -402,7 +405,6 @@ const AddSenderReceiverDetails = async function () {
         senderName = "",
         ...rest
       } = item;
-
       let transformedItem = {
         _id,
         senderEmail,
@@ -608,7 +610,7 @@ const GropingTransaction = async function () {
   // await DataMigration_Transaction_Id();
   // await AddReceiverAddress();
   // await AddSenderAddress();
-  // await AddSenderReceiverDetails();
   await BinaceUserMappingFunc();
+  await AddSenderReceiverDetails();
   await GropingTransaction();
 })();
